@@ -1,0 +1,31 @@
+# ===== 构建产物 =====
+target/
+build/
+coverage/
+
+# ===== Maven =====
+.m2/
+# 注：本项目无 mvnw（.mvn 已删）。构建方式：本机 Maven（开发）/ 容器内 Maven（Dockerfile builder 阶段，7D 部署）
+
+# ===== 运行时产物 =====
+*.log
+*.tmp
+*.temp
+admin/src/main/resources/temp/
+uploads/
+
+# ===== 环境变量（含密钥；模板 .env.example 放行）=====
+.env
+.env.*
+!.env.example
+
+# ===== IDE =====
+.idea/
+.vscode/
+*.iws
+*.iml
+*.ipr
+
+# ===== 系统 =====
+.DS_Store
+Thumbs.db
