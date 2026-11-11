@@ -1,0 +1,178 @@
+# 公共默认（2026-11-03）：所有服务统一「重启自恢复 + 日志限额」
+# 为什么用锚点：restart/logging 是每个容器都要的配置，写 6 遍容易漏（此前 5 个服务全都没有）
+x-defaults: &defaults
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"                # 单容器日志上限 30MB
+
+services:
+  mysql:
+    <<: *defaults
+    image: ${MYSQL_IMAGE:-mysql:8.4}
+    container_name: banma-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD:-}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-banma_interview}
+    ports:
+      - "3306:3306"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./admin/src/main/resources/sql/table.sql:/docker-entrypoint-initdb.d/01-table.sql:ro
+      - ./admin/src/main/resources/sql/admin_permission.sql:/docker-entrypoint-initdb.d/02-admin_permission.sql:ro
+      - ./admin/src/main/resources/sql/agent_properties.sql:/docker-entrypoint-initdb.d/03-agent_properties.sql:ro
+      - ./admin/src/main/resources/sql/ai_properties.sql:/docker-entrypoint-initdb.d/04-ai_properties.sql:ro
+      - ./admin/src/main/resources/sql/t_user.sql:/docker-entrypoint-initdb.d/05-t_user.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -p${MYSQL_PASSWORD:-}"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  mongo:
+    <<: *defaults
+    image: ${MONGO_IMAGE:-mongo:7.0}
+    container_name: banma-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+
+  redis:
+    <<: *defaults
+    image: ${REDIS_IMAGE:-redis:7.2}
+    container_name: banma-redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Qdrant 向量库（ADR-003）：单 collection banma_questions，1024 维
+  # 服务名 = compose 内网 DNS：容器内用 http://banma-qdrant:6333；
+  # 本地开发（Python 在 Windows）用 http://192.168.100.211:6333
+  banma-qdrant:
+    <<: *defaults
+    image: qdrant/qdrant:v1.15.0   # 钉版本，不用 latest
+    container_name: banma-qdrant
+    ports:
+      - "6333:6333"                # 与其他服务一致用端口映射，访问控制交给 ufw
+    volumes:
+      - qdrant-data:/qdrant/storage
+    environment:
+      QDRANT__TELEMETRY_DISABLED: "true"
+      # 生产必开（暴露到非受信网络时）：
+      # QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY}
+    healthcheck:
+      # qdrant 镜像内无 curl/wget，用 bash 的 /dev/tcp 探端口
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 768M             # 4G 中给 Qdrant 的硬上限（1 万条向量约 40MB）
+          cpus: "1.0"
+
+  backend:
+    <<: *defaults
+    image: ${BACKEND_IMAGE:-banma-interview-backend:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BUILDER_IMAGE: ${BUILDER_IMAGE:-maven:3.9.11-eclipse-temurin-17}
+        RUNTIME_IMAGE: ${RUNTIME_IMAGE:-eclipse-temurin:17-jre-jammy}
+    container_name: banma-backend
+    depends_on:
+      mysql:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-banma_interview}
+      MYSQL_USERNAME: ${MYSQL_USERNAME:-root}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-}
+      MONGODB_HOST: mongo
+      MONGODB_PORT: 27017
+      MONGODB_DATABASE: ${MONGODB_DATABASE:-banma_interview}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      BANMA_STORAGE_BASE_DIR: /app/data
+      BANMA_MULTIPART_TEMP_DIR: /app/data/temp/upload
+      BANMA_AUDIO_TEMP_DIR: /app/data/temp/audio
+      BANMA_LOG_DIR: /app/logs
+    ports:
+      - "8002:8002"
+    volumes:
+      - backend-data:/app/data
+      - backend-logs:/app/logs
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8002/actuator/health || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  # Python Agent 服务（ADR-001/002）：无状态，仅连 LLM/Qdrant，由 Java 内网调用
+  # 服务名 = compose 内网 DNS 主机名，契约见 docs/server/03：http://banma-agent-python:8100
+  banma-agent-python:
+    <<: *defaults
+    image: ${AGENT_IMAGE:-banma-agent-python:local}
+    build:
+      context: ../AI-Meeting-Agent   # 三仓同级目录（ADR-012：clone 到同一父目录）
+    container_name: banma-agent-python
+    env_file:
+      # Spring 多 profile 模式的 Python 等价物（2026-11-07 定稿）：
+      #   .env = application.yml（公共项：Key/模型名/超时，跨机同步）
+      #   .env.test = application-test.yml（环境差异项，由下方 environment 激活）
+      # 覆盖顺序：environment(BANMA_ENV) > .env.test > .env
+      - path: ../AI-Meeting-Agent/.env
+        required: true
+      - path: ../AI-Meeting-Agent/.env.test
+        required: true
+    environment:
+      # ≈ spring.profiles.active：激活哪个 .env.{env}；部署配置写死，永不手敲
+      BANMA_ENV: test
+    ports:
+      - "8100:8100"
+    depends_on:
+      banma-qdrant:
+        condition: service_healthy
+    healthcheck:
+      # slim 镜像没有 curl，用镜像内自带的 python 发起真实 HTTP 探活
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/v1/health')"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s              # 给应用启动留缓冲，此期内失败不计入重试
+
+volumes:
+  mysql-data:
+  mongo-data:
+  redis-data:
+  backend-data:
+  backend-logs:
+  qdrant-data:
