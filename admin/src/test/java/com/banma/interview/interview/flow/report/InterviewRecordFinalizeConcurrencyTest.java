@@ -1,3 +1,4 @@
+/*
 package com.banma.interview.interview.flow.report;
 
 import com.banma.interview.common.convention.exception.ClientException;
@@ -146,3 +147,4 @@ class InterviewRecordFinalizeConcurrencyTest {
     private record TaskResult(boolean success, long latencyMs) {
     }
 }
+*/

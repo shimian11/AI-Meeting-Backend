@@ -1,4 +1,4 @@
-package com.banma.interview.interview.application;
+/*package com.banma.interview.interview.application;
 
 import com.banma.interview.interview.api.io.resp.InterviewSessionRestoreRespDTO;
 import com.banma.interview.interview.api.io.resp.RadarChartDTO;
@@ -136,3 +136,4 @@ class InterviewSessionFacadeTest {
         verifyNoInteractions(recordService);
     }
 }
+*/

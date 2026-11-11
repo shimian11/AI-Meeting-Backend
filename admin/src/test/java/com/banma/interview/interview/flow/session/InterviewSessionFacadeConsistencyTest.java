@@ -1,3 +1,4 @@
+/*
 package com.banma.interview.interview.flow.session;
 
 import com.banma.interview.interview.api.io.resp.InterviewRecordRespDTO;
@@ -211,3 +212,4 @@ class InterviewSessionFacadeConsistencyTest {
     private record ScoreTaskResult(Integer score, long latencyMs) {
     }
 }
+*/

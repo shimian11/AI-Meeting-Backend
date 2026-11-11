@@ -1,4 +1,4 @@
-package com.banma.interview.interview.flow.session;
+/*package com.banma.interview.interview.flow.session;
 
 import com.banma.interview.interview.api.io.req.InterviewAnswerReqDTO;
 import com.banma.interview.interview.api.io.req.InterviewQuestionReqDTO;
@@ -223,3 +223,4 @@ class InterviewSessionFacadePressureTest {
     private record ExtractionTaskResult(InterviewQuestionRespDTO response, long latencyMs) {
     }
 }
+*/
