@@ -1,4 +1,4 @@
-package com.banma.interview.toolkit.xunfei;
+package com.banma.interview.agent.application.cache;
 
 import com.banma.interview.agent.dao.entity.AgentPropertiesDO;
 import com.banma.interview.agent.api.io.resp.AgentPropertiesRespDTO;
@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class AgentPropertiesLoader implements CommandLineRunner {
+public class AgentPropertiesCache implements CommandLineRunner {
 
     private final AgentPropertiesService agentPropertiesService;
 

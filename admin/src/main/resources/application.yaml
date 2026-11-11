@@ -80,17 +80,8 @@ collection:
   vector:
     similarity-threshold: 0.9
 
-xunfei:
-  lat-key:
-    # 凭证从环境变量注入（.env → compose env_file），yaml 不留默认值（2026-11-11 安全整改）
-    app-id: ${XUNFEI_APP_ID:}
-    api-key: ${XUNFEI_API_KEY:}
-    api-secret: ${XUNFEI_API_SECRET:}
-    rta-api-key: ${XUNFEI_RTA_API_KEY:}
-
 banma-interview:
   security:
-    require-xunfei-secrets: true
   storage:
     base-dir: ${BANMA_STORAGE_BASE_DIR:${user.home}/.banma-interview}
     upload-temp-dir: ${BANMA_MULTIPART_TEMP_DIR:${banma-interview.storage.base-dir}/temp/upload}

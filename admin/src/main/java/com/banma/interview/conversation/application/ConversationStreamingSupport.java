@@ -1,6 +1,6 @@
 package com.banma.interview.conversation.application;
 
-import com.banma.interview.toolkit.xunfei.AIContentAccumulator;
+import com.banma.interview.common.streaming.AIContentAccumulator;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;

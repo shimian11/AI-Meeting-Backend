@@ -4,7 +4,7 @@ import cn.hutool.core.util.StrUtil;
 import com.banma.interview.agent.dao.entity.AgentConversation;
 import com.banma.interview.agent.dao.entity.AgentPropertiesDO;
 import com.banma.interview.agent.dao.repository.AgentConversationRepository;
-import com.banma.interview.toolkit.xunfei.AgentPropertiesLoader;
+import com.banma.interview.agent.application.cache.AgentPropertiesCache;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -18,7 +18,7 @@ import org.springframework.stereotype.Service;
 public class AgentResolver {
 
     private final AgentConversationRepository agentConversationRepository;
-    private final AgentPropertiesLoader agentPropertiesLoader;
+    private final AgentPropertiesCache agentPropertiesLoader;
 
     /**
      * 解析会话实际使用的智能体 id：会话绑定优先，其次使用请求指定的 id。

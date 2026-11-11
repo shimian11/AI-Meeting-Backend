@@ -12,7 +12,6 @@ import com.banma.interview.agent.dao.mapper.AgentFileAssetMapper;
 import com.banma.interview.agent.service.AgentFileAssetService;
 import com.banma.interview.common.convention.exception.ClientException;
 import com.banma.interview.common.enums.AgentErrorCodeEnum;
-import com.banma.interview.toolkit.xunfei.XingChenAIClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -22,7 +21,8 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.Date;
 
 /**
- * 智能体文件资产服务实现：负责文件上传到星辰并持久化文件资产记录。
+ * 智能体文件资产服务实现：负责文件存储并持久化文件资产记录。
+ * 讯飞星辰上传链路已下线（2026-11-11）；存储后端切换为 MinIO（6G，ADR-016）。
  */
 @Slf4j
 @Service
@@ -31,14 +31,21 @@ public class AgentFileAssetServiceImpl extends ServiceImpl<AgentFileAssetMapper,
         implements AgentFileAssetService {
 
     private static final String DEFAULT_BIZ_TYPE = "general";
-    private static final String SOURCE_PLATFORM_XINGCHEN = "xingchen";
+    /** 存储平台标识：讯飞下线后统一为 minio（6G 接入后生效） */
+    private static final String SOURCE_PLATFORM_MINIO = "minio";
 
-    private final XingChenAIClient xingChenAIClient;
     private final AgentResolver agentResolver;
     private final BusinessAgentResolver businessAgentResolver;
 
     /**
-     * 上传文件到星辰并保存文件资产记录，返回文件访问地址等信息。
+     * 保存文件资产记录并返回文件访问地址等信息。
+     *
+     * 步骤：
+     *   1. 校验上传文件非空
+     *   2. 解析智能体配置
+     *   3. 存储文件（原讯飞 uploadFile 已删除；MinIO 接入在 6G，此处暂抛「未接入」）
+     *   4. 组装文件资产记录并入库
+     *   5. 组装上传结果返回
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -47,66 +54,28 @@ public class AgentFileAssetServiceImpl extends ServiceImpl<AgentFileAssetMapper,
             String bizType,
             String username,
             MultipartFile file) {
-        // （1）校验上传文件非空
+        // 步骤 1：校验上传文件非空
         if (file == null || file.isEmpty()) {
             throw new ClientException("uploaded file cannot be empty", AgentErrorCodeEnum.AGENT_SAVE_ERROR);
         }
 
-        // （2）解析智能体配置并校验 API 凭证
+        // 步骤 2：解析智能体配置
         AgentPropertiesDO agentProperties = resolveAgentProperties(sessionId);
-        if (StrUtil.isBlank(agentProperties.getApiKey()) || StrUtil.isBlank(agentProperties.getApiSecret())) {
-            throw new ClientException("agent api credentials are missing", AgentErrorCodeEnum.AGENT_SAVE_ERROR);
-        }
 
-        // （3）调用星辰接口上传文件，失败时包装为业务异常
+        // 步骤 3：文件存储。讯飞 uploadFile 已删除；MinIO 在 6G 接入（ADR-016），
+        //         接入前上传接口不可用——直接报业务错误而非静默假成功
         String fileUrl;
         try {
-            fileUrl = xingChenAIClient.uploadFile(file, agentProperties.getApiKey(), agentProperties.getApiSecret());
-        } catch (Exception ex) {
-            log.error("File upload to xingchen failed, agentId={}, fileName={}",
-                    agentProperties.getId(), file.getOriginalFilename(), ex);
             throw new ClientException(
-                    "upload file to xingchen failed: " + ex.getMessage(),
-                    ex,
-                    AgentErrorCodeEnum.AGENT_SAVE_ERROR
-            );
+                    "文件存储后端切换中：讯飞上传已下线，MinIO 将于题库后端（6G）接入",
+                    AgentErrorCodeEnum.AGENT_SAVE_ERROR);
+        } catch (ClientException ex) {
+            throw ex;
         }
 
-        // （4）组装文件资产记录（归一化文件名、扩展名、大小等）并入库
-        String originalFileName = normalizeFileName(file.getOriginalFilename());
-        Date now = new Date();
-        AgentFileAssetDO fileAssetDO = new AgentFileAssetDO();
-        fileAssetDO.setAgentId(agentProperties.getId());
-        fileAssetDO.setSessionId(StrUtil.isBlank(sessionId) ? null : sessionId.trim());
-        fileAssetDO.setUserName(StrUtil.blankToDefault(username, "unknown"));
-        fileAssetDO.setBizType(StrUtil.blankToDefault(bizType, DEFAULT_BIZ_TYPE));
-        fileAssetDO.setSourcePlatform(SOURCE_PLATFORM_XINGCHEN);
-        fileAssetDO.setFileName(originalFileName);
-        fileAssetDO.setFileExt(extractFileExt(originalFileName));
-        fileAssetDO.setContentType(file.getContentType());
-        fileAssetDO.setFileSize(file.getSize());
-        fileAssetDO.setFileUrl(fileUrl);
-        fileAssetDO.setUploadStatus(1);
-        fileAssetDO.setCreateTime(now);
-        fileAssetDO.setUpdateTime(now);
-        fileAssetDO.setDelFlag(0);
-
-        boolean saved = save(fileAssetDO);
-        if (!saved) {
-            throw new ClientException("persist uploaded file url failed", AgentErrorCodeEnum.AGENT_SAVE_ERROR);
-        }
-
-        // （5）组装上传结果返回
-        AgentFileUploadRespDTO respDTO = new AgentFileUploadRespDTO();
-        respDTO.setId(fileAssetDO.getId());
-        respDTO.setSessionId(fileAssetDO.getSessionId());
-        respDTO.setBizType(fileAssetDO.getBizType());
-        respDTO.setFileName(fileAssetDO.getFileName());
-        respDTO.setFileSize(fileAssetDO.getFileSize());
-        respDTO.setContentType(fileAssetDO.getContentType());
-        respDTO.setFileUrl(fileAssetDO.getFileUrl());
-        respDTO.setCreateTime(fileAssetDO.getCreateTime());
-        return respDTO;
+        // 步骤 4~5（MinIO 接入后恢复）：组装资产记录入库并返回
+        // String originalFileName = normalizeFileName(file.getOriginalFilename());
+        // ... 原 (4)(5) 逻辑保留在 git 历史（commit e3b3c99 之前的版本），6G 时参照恢复
     }
 
     /**

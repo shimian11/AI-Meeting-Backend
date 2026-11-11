@@ -2,7 +2,7 @@ package com.banma.interview.agent.application;
 
 import com.banma.interview.agent.dao.entity.AgentPropertiesDO;
 import com.banma.interview.common.convention.exception.ClientException;
-import com.banma.interview.toolkit.xunfei.AgentPropertiesLoader;
+import com.banma.interview.agent.application.cache.AgentPropertiesCache;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -17,7 +17,7 @@ class BusinessAgentResolverTest {
         BusinessAgentBindingProperties properties = new BusinessAgentBindingProperties();
         properties.setInterviewDemeanor("神态分析官");
 
-        AgentPropertiesLoader agentPropertiesLoader = mock(AgentPropertiesLoader.class);
+        AgentPropertiesCache agentPropertiesLoader = mock(AgentPropertiesCache.class);
         AgentPropertiesDO agentProperties = new AgentPropertiesDO();
         agentProperties.setId(9L);
         agentProperties.setAgentName("神态分析官");
@@ -35,7 +35,7 @@ class BusinessAgentResolverTest {
         BusinessAgentBindingProperties properties = new BusinessAgentBindingProperties();
         properties.setInterviewQuestionExtraction("不存在的出题官");
 
-        AgentPropertiesLoader agentPropertiesLoader = mock(AgentPropertiesLoader.class);
+        AgentPropertiesCache agentPropertiesLoader = mock(AgentPropertiesCache.class);
         AgentPropertiesDO agentProperties = new AgentPropertiesDO();
         agentProperties.setId(8L);
         agentProperties.setAgentName("面试出题官");
@@ -54,7 +54,7 @@ class BusinessAgentResolverTest {
         BusinessAgentBindingProperties properties = new BusinessAgentBindingProperties();
         properties.setGeneralAgentChat("不存在的通用智能体");
 
-        AgentPropertiesLoader agentPropertiesLoader = mock(AgentPropertiesLoader.class);
+        AgentPropertiesCache agentPropertiesLoader = mock(AgentPropertiesCache.class);
         when(agentPropertiesLoader.getByAgentName("不存在的通用智能体")).thenReturn(null);
         when(agentPropertiesLoader.getByAgentName("通用智能体")).thenReturn(null);
 

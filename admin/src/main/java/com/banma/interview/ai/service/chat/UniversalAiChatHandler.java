@@ -8,7 +8,7 @@ import com.banma.interview.ai.api.io.resp.AiMessageHistoryRespDTO;
 import com.banma.interview.ai.dao.entity.AiPropertiesDO;
 import com.banma.interview.ai.enums.AiPropritiesType;
 import com.banma.interview.common.convention.exception.ClientException;
-import com.banma.interview.toolkit.xunfei.AIContentAccumulator;
+import com.banma.interview.common.streaming.AIContentAccumulator;
 import io.micrometer.observation.ObservationRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;

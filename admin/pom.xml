@@ -63,17 +63,6 @@
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-deepseek</artifactId>
         </dependency>
-
-        <dependency>
-            <groupId>us.codecraft</groupId>
-            <artifactId>webmagic-core</artifactId>
-            <version>${webmagic.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>us.codecraft</groupId>
-            <artifactId>webmagic-extension</artifactId>
-            <version>${webmagic.version}</version>
-        </dependency>
         <dependency>
             <groupId>org.jsoup</groupId>
             <artifactId>jsoup</artifactId>
@@ -145,12 +134,6 @@
             <version>${liteflow.version}</version>
         </dependency>
 
-        <dependency>
-            <groupId>com.alibaba</groupId>
-            <artifactId>easyexcel</artifactId>
-            <version>${easyexcel.version}</version>
-        </dependency>
-
         <!-- Lombok: 生成getter/setter/log等，并作为注解处理器参与编译 -->
         <dependency>
             <groupId>org.projectlombok</groupId>
@@ -170,36 +153,6 @@
             <artifactId>mockito-core</artifactId>
             <version>${mockito.version}</version>
             <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>cn.xfyun</groupId>
-            <artifactId>websdk-java-speech</artifactId>
-            <version>3.0.2</version>
-        </dependency>
-
-        <dependency>
-            <groupId>cn.xfyun</groupId>
-            <artifactId>websdk-java-nlp</artifactId>
-            <version>2.0.6</version>
-        </dependency>
-
-        <dependency>
-            <groupId>cn.xfyun</groupId>
-            <artifactId>websdk-java-ocr</artifactId>
-            <version>2.0.6</version>
-        </dependency>
-
-        <dependency>
-            <groupId>cn.xfyun</groupId>
-            <artifactId>websdk-java-face-detector</artifactId>
-            <version>2.0.6</version>
-        </dependency>
-
-        <dependency>
-            <groupId>cn.xfyun</groupId>
-            <artifactId>websdk-java-spark</artifactId>
-            <version>2.1.2</version>
         </dependency>
 
         <!-- Sa-Token 权限认证框架 -->
@@ -223,6 +176,16 @@
             <version>4.9.3</version>
         </dependency>
 
+        <!-- 邮件验证码（SMTP） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+        <!-- BCrypt 密码哈希：只要 crypto 工具包，禁引 spring-boot-starter-security（会接管全部请求） -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-crypto</artifactId>
+        </dependency>
 
     </dependencies>
     <build>

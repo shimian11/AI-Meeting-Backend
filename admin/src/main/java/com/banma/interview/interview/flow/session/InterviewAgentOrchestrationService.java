@@ -12,8 +12,6 @@ import com.banma.interview.interview.application.runtime.InterviewSessionRuntime
 import com.banma.interview.interview.application.runtime.InterviewRuntimeRehydrateScope;
 import com.banma.interview.interview.flow.answer.InterviewAnswerPipeline;
 import com.banma.interview.interview.flow.answer.InterviewQuestionLockService;
-import com.banma.interview.interview.flow.demeanor.InterviewDemeanorService;
-import com.banma.interview.interview.flow.extraction.InterviewQuestionExtractionService;
 import com.banma.interview.interview.service.InterviewQuestionCacheService;
 import com.banma.interview.interview.service.model.InterviewFlowState;
 import com.banma.interview.interview.service.model.InterviewRuntimeLoadMode;
@@ -38,10 +36,6 @@ public class InterviewAgentOrchestrationService implements InterviewWorkflowServ
 
     /** 题目、流程与得分的 Redis 缓存读写 */
     private final InterviewQuestionCacheService interviewQuestionCacheService;
-    /** 题目提取（幂等 + 落库） */
-    private final InterviewQuestionExtractionService interviewQuestionExtractionService;
-    /** 神态评估 */
-    private final InterviewDemeanorService interviewDemeanorService;
     /** 答题主流水线 */
     private final InterviewAnswerPipeline interviewAnswerPipeline;
     /** flow 状态机（题号游标与状态迁移） */
@@ -55,8 +49,9 @@ public class InterviewAgentOrchestrationService implements InterviewWorkflowServ
      * 编排入口：提取链路由题目提取服务完成。
      */
     public InterviewQuestionRespDTO extractInterviewQuestions(InterviewQuestionReqDTO reqDTO) {
-        // 编排入口：提取链路直接委托 extraction flow。
-        return interviewQuestionExtractionService.extractInterviewQuestions(reqDTO);
+        // 讯飞版出题提取已下线（2026-11-11）；出题链路由 Python 出题官承接（前端 7C2 已直连验证）
+        throw new UnsupportedOperationException(
+                "讯飞出题链路已下线：出题走 Python Agent（/v1/agents/question-officer/run）");
     }
 
     /**
@@ -152,7 +147,8 @@ public class InterviewAgentOrchestrationService implements InterviewWorkflowServ
      * 编排入口：神态评估委托神态评分服务处理。
      */
     public String evaluateDemeanor(DemeanorEvaluationReqDTO reqDTO) {
-        return interviewDemeanorService.evaluateDemeanor(reqDTO);
+        // 神态官一期不做（ADR-009），讯飞依赖已随 2026-11-11 清理移除；二期按 Python Agent 方案重建
+        throw new UnsupportedOperationException("神态评估一期未启用（ADR-009）");
     }
 
     /**

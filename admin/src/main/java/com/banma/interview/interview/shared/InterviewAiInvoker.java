@@ -6,7 +6,6 @@ import com.banma.interview.agent.dao.entity.AgentPropertiesDO;
 import com.banma.interview.interview.application.guard.core.AiCallGuardService;
 import com.banma.interview.interview.application.guard.core.InterviewAiGuardStage;
 import com.banma.interview.interview.application.guard.singleflight.service.DistributedInterviewAiSingleFlightService;
-import com.banma.interview.toolkit.xunfei.XingChenAIClient;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -24,7 +23,6 @@ import java.util.concurrent.Callable;
 public class InterviewAiInvoker {
 
     /** 星辰（讯飞）AI 客户端，降级通道一期不启用 */
-    private final XingChenAIClient xingChenAIClient;
     /** AI 调用治理（Resilience4j 装饰器链） */
     private final AiCallGuardService aiCallGuardService;
     /** 分布式 single-flight（Redis 协调 + 回放） */
@@ -225,30 +223,9 @@ public class InterviewAiInvoker {
         // （1）创建响应缓冲，用于拼接流式返回片段
         StringBuilder aiResponse = new StringBuilder();
         // （2）会话 id 为空时生成临时标识，随后走底层对话接口
-        // （3）最后统一走底层 chat，并把流式片段拼成完整响应字符串返回上层解析。
-        xingChenAIClient.chat(
-                input,
-                StrUtil.isNotBlank(sessionId) ? sessionId : "evaluation_" + System.currentTimeMillis(),
-                "{}",
-                false,
-                new OutputStream() {
-                    @Override
-                    public void write(int b) {
-                    }
-
-                    @Override
-                    public void write(byte[] b, int off, int len) {
-                        aiResponse.append(new String(b, off, len, StandardCharsets.UTF_8));
-                    }
-                },
-                data -> {
-                },
-                agentProperties.getApiKey(),
-                agentProperties.getApiSecret(),
-                agentProperties.getApiFlowId(),
-                fileUrl,
-                parameters
-        );
-        return aiResponse.toString();
+        // 星辰链路已下线（2026-11-11）。本类保留守卫/单飞编排骨架，
+        // 6C 时 doChat 改写为 BanmaAgentClient 转发 Python /v1/agents/*。
+        throw new UnsupportedOperationException(
+                "讯飞星辰已下线：AI 调用将切换至 Python Agent（6C 实现双路由）");
     }
 }

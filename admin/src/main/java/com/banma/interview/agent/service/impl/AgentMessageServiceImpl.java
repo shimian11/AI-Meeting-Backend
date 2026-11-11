@@ -16,9 +16,8 @@ import com.banma.interview.conversation.application.ConversationMessageHistorySe
 import com.banma.interview.conversation.application.ConversationMessagePersistenceService;
 import com.banma.interview.conversation.application.ConversationOwnershipService;
 import com.banma.interview.conversation.application.ConversationStreamingSupport;
-import com.banma.interview.toolkit.xunfei.AIContentAccumulator;
-import com.banma.interview.toolkit.xunfei.AgentPropertiesLoader;
-import com.banma.interview.toolkit.xunfei.XingChenAIClient;
+import com.banma.interview.common.streaming.AIContentAccumulator;
+import com.banma.interview.agent.application.cache.AgentPropertiesCache;
 import com.banma.interview.user.api.io.req.UserMessageReqDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,8 +44,7 @@ public class AgentMessageServiceImpl implements AgentMessageService {
     private static final String DEFAULT_ERROR_CONTENT = "Sorry, an error occurred while processing your request.";
 
     private final AgentResolver agentResolver;
-    private final XingChenAIClient xingChenAIClient;
-    private final AgentPropertiesLoader agentPropertiesLoader;
+    private final AgentPropertiesCache agentPropertiesLoader;
     private final AgentConversationService agentConversationService;
     private final ConversationOwnershipService conversationOwnershipService;
     private final ConversationMessageHistoryService conversationMessageHistoryService;
@@ -167,38 +165,8 @@ public class AgentMessageServiceImpl implements AgentMessageService {
                 .userMessageSaver(() -> conversationMessagePersistenceService.saveAgentUserMessage(sessionId, userMessage))
                 // （3）流式执行器：加载智能体配置并调用星辰接口，将输出写入 SSE
                 .streamExecutor((historyMessages, contentAccumulator) -> {
-                    AgentPropertiesDO agentProperties = agentPropertiesLoader.getByAgentId(agentId);
-                    if (agentProperties == null) {
-                        throw new ClientException(AgentErrorCodeEnum.Agent_NULL);
-                    }
-                    // 调用星辰聊天接口，输出流写入 SSE 并累计内容
-                    xingChenAIClient.chat(
-                            userMessage,
-                            sessionId,
-                            buildHistoryJson(historyMessages),
-                            true,
-                            new OutputStream() {
-                                @Override
-                                public void write(int b) {
-                                }
-
-                                @Override
-                                public void write(byte[] b, int off, int len) throws IOException {
-                                    String jsonChunk = new String(b, off, len);
-                                    emitter.send(SseEmitter.event().data(jsonChunk));
-                                    contentAccumulator.appendChunk(b);
-                                }
-
-                                @Override
-                                public void flush() {
-                                }
-                            },
-                            data -> {
-                            },
-                            agentProperties.getApiKey(),
-                            agentProperties.getApiSecret(),
-                            agentProperties.getApiFlowId()
-                    );
+                    // 星辰链路已下线（2026-11-11）；通用对话 SSE 将切换到 Python Agent（6C）
+                    throw new ClientException("通用对话流式链路切换中：讯飞星辰已下线，Python Agent 将于 6C 接入");
                 })
                 // （4）助手消息落库，并回写会话消息数
                 .assistantMessageSaver(payload -> conversationMessagePersistenceService.saveAgentAssistantMessage(

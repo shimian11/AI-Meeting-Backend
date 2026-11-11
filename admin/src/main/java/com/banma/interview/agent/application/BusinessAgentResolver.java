@@ -4,7 +4,7 @@ import cn.hutool.core.util.StrUtil;
 import com.banma.interview.agent.dao.entity.AgentPropertiesDO;
 import com.banma.interview.common.convention.exception.ClientException;
 import com.banma.interview.common.enums.InterviewErrorCodeEnum;
-import com.banma.interview.toolkit.xunfei.AgentPropertiesLoader;
+import com.banma.interview.agent.application.cache.AgentPropertiesCache;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -21,7 +21,7 @@ import java.util.Set;
 public class BusinessAgentResolver {
 
     private final BusinessAgentBindingProperties bindingProperties;
-    private final AgentPropertiesLoader agentPropertiesLoader;
+    private final AgentPropertiesCache agentPropertiesLoader;
 
     /**
      * 解析指定业务场景所需的智能体配置，找不到时抛出业务异常。

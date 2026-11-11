@@ -17,7 +17,7 @@ import com.banma.interview.common.convention.exception.ClientException;
 import com.banma.interview.conversation.application.ConversationMessageHistoryService;
 import com.banma.interview.conversation.application.ConversationMessagePersistenceService;
 import com.banma.interview.conversation.application.ConversationStreamingSupport;
-import com.banma.interview.toolkit.xunfei.AIContentAccumulator;
+import com.banma.interview.common.streaming.AIContentAccumulator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;

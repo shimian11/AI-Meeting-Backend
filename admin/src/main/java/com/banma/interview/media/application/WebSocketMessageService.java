@@ -1,6 +1,5 @@
 package com.banma.interview.media.application;
 
-import com.banma.interview.media.infrastructure.websocket.AudioTranscriptionWebSocketHandler;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -24,15 +23,9 @@ public class WebSocketMessageService {
      * 向指定用户同步推送一条 WebSocket 消息，发送失败时记录日志并返回 false。
      */
     public boolean sendMessageToUser(String userId, String type, String message, String data) {
-        // （1）委托底层 WebSocket handler 推送消息
-        try {
-            AudioTranscriptionWebSocketHandler.sendMessageToUser(userId, type, message, data);
-            return true;
-        } catch (Exception ex) {
-            // （2）推送异常时记录错误日志并返回失败结果
-            log.error("Failed to send websocket message, userId={}", userId, ex);
-            return false;
-        }
+        // 语音转写通道已下线（讯飞 ASR 清理，2026-11-11）：统一返回失败，调用方按不可达处理
+        log.warn("WebSocket push skipped: transcription channel offline, userId={}, type={}", userId, type);
+        return false;
     }
 
     /**
@@ -46,7 +39,7 @@ public class WebSocketMessageService {
      * 判断指定用户当前是否在线。
      */
     public boolean isUserOnline(String userId) {
-        return AudioTranscriptionWebSocketHandler.isUserOnline(userId);
+        return false; // 语音转写通道已下线，无在线用户
     }
 
     /**

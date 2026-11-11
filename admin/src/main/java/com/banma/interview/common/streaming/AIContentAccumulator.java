@@ -1,4 +1,4 @@
-package com.banma.interview.toolkit.xunfei;
+package com.banma.interview.common.streaming;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
