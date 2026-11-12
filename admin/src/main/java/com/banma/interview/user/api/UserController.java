@@ -1,20 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.banma.interview.user.api;
 
 import cn.dev33.satoken.annotation.SaCheckRole;
@@ -63,15 +46,26 @@ public class UserController {
     private final PermissionService permissionService;
     private final MailCodeService mailCodeService;
 
+    /**
+     * 按用户名（值=邮箱）查询用户信息。
+     * 仅管理员可调用：返回体含真实姓名等资料，开放给普通用户等于"任何人可查任意人"。
+     */
     @GetMapping("/{username}")
+    @SaCheckRole("admin")
     public Result<UserRespDTO> getUserByUsername(@PathVariable("username") String username) {
         return Results.success(userService.getUserByUsername(username));
     }
 
+    /**
+     * 查询用户的真实信息（含手机号、邮箱等 PII）。
+     * <仅管理员可调用——这是 PII 暴露面最大的接口，必须限权。
+     */
     @GetMapping("/actual/{username}")
+    @SaCheckRole("admin")
     public Result<UserActualRespDTO> getActualUserByUsername(@PathVariable("username") String username) {
         return Results.success(BeanUtil.toBean(userService.getUserByUsername(username), UserActualRespDTO.class));
     }
+
 
     @GetMapping("/has-username")
     public Result<Boolean> hasUsername(@RequestParam("username") String username) {
