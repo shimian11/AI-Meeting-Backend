@@ -4,6 +4,15 @@ server:
 spring:
   application:
     name: banma-interview-server
+  # ── 关闭 Spring AI 自动配置（2026-11-12）──
+  # 本项目 AI 调用走 Python Agent（ADR-004）；legacy 的通用对话模块
+  # （UniversalAiChatHandler）是手动 new OpenAiChatModel / DeepSeekChatModel，
+  # 从 ai_properties 表读配置，不依赖自动装配出来的 Bean。
+  # 不排除的后果：自动配置会在启动时创建 OpenAiAudioSpeechModel 等 Bean 并要求
+  # spring.ai.openai.api-key 非空 —— 表现为"项目没用 OpenAI，却因 OpenAI 起不来"。
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.model.deepseek.autoconfigure.DeepSeekChatAutoConfiguration
   # ── 邮箱验证码 SMTP──
   # 凭证走环境变量（.env 经 compose env_file 注入），yaml 不留真值
   mail:
@@ -74,18 +83,6 @@ spring:
         max-size: 8
         queue-capacity: 100
         thread-name-prefix: redis-session-async-
-  ai:
-    openai:
-      api-key: ${SPRING_AI_OPENAI_API_KEY:sk-xxxxxxxxxxxxx}
-      base-url: ${SPRING_AI_OPENAI_BASE_URL:https://api.openai.com}
-      chat:
-        options:
-          model: ${SPRING_AI_OPENAI_MODEL:gpt-4o-mini}
-          temperature: ${SPRING_AI_OPENAI_TEMPERATURE:0.7}
-      embedding:
-        options:
-          model: ${SPRING_AI_OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
-
 management:
   endpoints:
     web:
