@@ -22,9 +22,6 @@ import org.springframework.ai.deepseek.DeepSeekChatOptions;
 import org.springframework.ai.deepseek.api.DeepSeekApi;
 import org.springframework.ai.model.SimpleApiKey;
 import org.springframework.ai.model.tool.ToolCallingManager;
-import org.springframework.ai.openai.OpenAiChatModel;
-import org.springframework.ai.openai.OpenAiChatOptions;
-import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.retry.support.RetryTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
@@ -211,39 +208,13 @@ public class UniversalAiChatHandler implements AiChatHandler {
                     .build();
         }
 
-        // （4）其余类型使用 OpenAI 兼容客户端
-        OpenAiApi openAiApi = new OpenAiApi(
-                baseUrl,
-                new SimpleApiKey(apiKey),
-                new LinkedMultiValueMap<>(),
-                "/chat/completions",
-                "/embeddings",
-                restClientBuilder,
-                WebClient.builder(),
-                new DefaultResponseErrorHandler()
-        );
-
-        OpenAiChatOptions.Builder optionsBuilder = OpenAiChatOptions.builder()
-                .model(aiProperties.getModelName());
-
-        if (aiProperties.getMaxTokens() != null) {
-            optionsBuilder.maxTokens(aiProperties.getMaxTokens());
-        }
-
-        OpenAiChatOptions options = optionsBuilder.build();
-        ToolCallingManager toolCallingManager = ToolCallingManager.builder().build();
-
-        OpenAiChatModel chatModel = new OpenAiChatModel(
-                openAiApi,
-                options,
-                toolCallingManager,
-                RetryTemplate.defaultInstance(),
-                ObservationRegistry.NOOP
-        );
-
-        return ChatClient.builder(chatModel)
-                .defaultOptions(options)
-                .build();
+        // （4）其余类型不支持
+        // OpenAI（及任何走 OpenAI 兼容协议的类型）已在 2026-11-12 随
+        // spring-ai-starter-model-openai 依赖一并下线；讯飞星火更早（台账 #73）。
+        // 当前 Java 侧仅保留 DeepSeek 一个直连实现，其余场景统一走 Python Agent。
+        throw new ClientException(
+                "不支持的 AI 类型：" + aiProperties.getAiType()
+                        + "。当前 Java 侧仅支持 deepseek；其他模型请走 Python Agent");
     }
 
     /**
