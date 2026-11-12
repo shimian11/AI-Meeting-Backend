@@ -39,10 +39,10 @@ class MailCodeServiceImpl implements MailCodeService {
     private int codeTtlMinutes;
 
     /** 同邮箱发送间隔（秒），默认 60 */
-    @Value("${spring.mail.username:}")
-    private int sendIntervalMinutes;
+    @Value("${banma.mail.send-interval-seconds:60}")
+    private int sendIntervalSeconds;
 
-    /** 发件人地址（与 spring.mail.username 同源） */
+    /** 发件人地址 */
     @Value("${spring.mail.username:}")
     private String mailFrom;
 
@@ -65,7 +65,7 @@ class MailCodeServiceImpl implements MailCodeService {
         //1、频控
         String limitKey = String.format(KEY_LIMIT, scene, email);
         Boolean acquired = stringRedisTemplate.opsForValue()
-                .setIfAbsent(limitKey, "1", Duration.ofSeconds(sendIntervalMinutes));
+                .setIfAbsent(limitKey, "1", Duration.ofSeconds(sendIntervalSeconds));
         if(Boolean.FALSE.equals(acquired)){
             throw new ClientException("发送太频繁，请 1 分钟后重试");
         }
