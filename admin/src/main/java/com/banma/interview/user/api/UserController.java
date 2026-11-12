@@ -100,8 +100,8 @@ public class UserController {
 
     @PostMapping("/login")
     public Result<Map<String, Object>> login(@RequestBody UserLoginReqDTO requestParam) {
-        userService.login(requestParam);
-        loginSessionService.login(requestParam.getUsername());
+        userService.verifyPassword(requestParam);       //只验密码
+        loginSessionService.login(requestParam.getUsername());      //Sa-token生成token
 
         Map<String, Object> result = new HashMap<>();
         result.put("token", loginSessionService.getCurrentToken());

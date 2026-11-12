@@ -22,6 +22,7 @@ public class SaTokenAuthInterceptorConfig implements WebMvcConfigurer {
                 .notMatch(("/api/banma/v1/users/check-login"))
                 .notMatch("/api/banma/v1/ai/doubao/**")
                 .notMatch("/api/banma/v1/ai/roleplay/**")
+                .notMatch("/api/banma/v1/users/mail-code")
                 .check(StpUtil::checkLogin)
         )).addPathPatterns("/**");
     }

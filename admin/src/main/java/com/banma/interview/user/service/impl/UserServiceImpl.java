@@ -1,20 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.banma.interview.user.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
@@ -22,6 +5,7 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.lang.UUID;
 import cn.hutool.core.util.StrUtil;
 import com.alibaba.fastjson2.JSON;
+import com.banma.interview.user.service.MailCodeService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -48,6 +32,7 @@ import org.redisson.api.RedissonClient;
 import org.springframework.beans.BeanUtils;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -71,6 +56,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements 
     private final RBloomFilter<String> userRegisterCachePenetrationBloomFilter;
     private final RedissonClient redissonClient;
     private final StringRedisTemplate stringRedisTemplate;
+    private final MailCodeService mailCodeService;
+    private final PasswordEncoder passwordEncoder;
 
     /**
      * 按用户名查询用户信息，用户不存在时抛出业务异常。
@@ -102,31 +89,35 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements 
     /**
      * 注册新用户：校验用户名、加分布式锁、落库并写入布隆过滤器。
      */
-    @Transactional(rollbackFor = Exception.class)
-    @Override
     public void register(UserRegisterReqDTO requestParam) {
-        // （1）校验用户名是否已被占用
+        if(!mailCodeService.verify("register", requestParam.getMail(), requestParam.getMailCode())) {
+            throw new ClientException("验证码错误或已过期");
+        }
+
+        requestParam.setUsername(requestParam.getMail());
         if (!hasUsername(requestParam.getUsername())) {
             throw new ClientException(USER_NAME_EXIST);
         }
-        // （2）按用户名加分布式锁，避免并发重复注册
+
+        //分布式锁防并发重复注册
         RLock lock = redissonClient.getLock(LOCK_USER_REGISTER_KEY + requestParam.getUsername());
-        if (!lock.tryLock()) {
+        if(!lock.tryLock()){
             throw new ClientException(USER_NAME_EXIST);
         }
         try {
-            // （3）写入用户记录并同步更新布隆过滤器
-            int inserted = baseMapper.insert(BeanUtil.toBean(requestParam, UserDO.class));
-            if (inserted < 1) {
+            UserDO userDO = BeanUtil.toBean(requestParam, UserDO.class);
+            userDO.setPassword(passwordEncoder.encode(requestParam.getPassword()));
+            int insert = baseMapper.insert(userDO);
+            if(insert < 1){
                 throw new ClientException(USER_SAVE_ERROR);
             }
             userRegisterCachePenetrationBloomFilter.add(requestParam.getUsername());
-        } catch (DuplicateKeyException ex) {
-            // （4）唯一键冲突时提示用户名已存在
+        } catch (DuplicateKeyException e) {
             throw new ClientException(USER_EXIST);
         } finally {
             lock.unlock();
         }
+
     }
 
     /**
@@ -154,58 +145,19 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements 
     }
 
     /**
-     * 用户登录：校验用户名密码，已登录则复用 token，否则生成新 token 并写入 Redis。
+     * 校验密码
      */
     @Override
-    public UserLoginRespDTO login(UserLoginReqDTO requestParam) {
-        // （1）按用户名、密码查询未删除的用户
+    public void verifyPassword(UserLoginReqDTO requestParam) {
+        //1、按username查
         LambdaQueryWrapper<UserDO> queryWrapper = Wrappers.lambdaQuery(UserDO.class)
                 .eq(UserDO::getUsername, requestParam.getUsername())
-                .eq(UserDO::getPassword, requestParam.getPassword())
                 .eq(UserDO::getDelFlag, 0);
         UserDO userDO = baseMapper.selectOne(queryWrapper);
-        if (userDO == null) {
-            throw new ClientException("user does not exist");
+        //2、BCrypt对比
+        if(userDO == null || !passwordEncoder.matches(requestParam.getPassword(), userDO.getPassword())){
+            throw new ClientException("账号或密码错误");
         }
-
-        // （2）已存在登录态时续期并复用原 token
-        Map<Object, Object> hasLoginMap = stringRedisTemplate.opsForHash().entries(USER_LOGIN_KEY + requestParam.getUsername());
-        if (CollUtil.isNotEmpty(hasLoginMap)) {
-            stringRedisTemplate.expire(USER_LOGIN_KEY + requestParam.getUsername(), 30L, TimeUnit.MINUTES);
-            String token = hasLoginMap.keySet().stream()
-                    .findFirst()
-                    .map(Object::toString)
-                    .orElseThrow(() -> new ClientException("user login state is invalid"));
-            return new UserLoginRespDTO(token);
-        }
-
-        // （3）生成新 token 写入 Redis 并设置 30 分钟过期
-        String uuid = UUID.randomUUID().toString();
-        stringRedisTemplate.opsForHash().put(USER_LOGIN_KEY + requestParam.getUsername(), uuid, JSON.toJSONString(userDO));
-        stringRedisTemplate.expire(USER_LOGIN_KEY + requestParam.getUsername(), 30L, TimeUnit.MINUTES);
-        return new UserLoginRespDTO(uuid);
-    }
-
-    /**
-     * 校验指定 token 是否为该用户的有效登录凭证。
-     */
-    @Override
-    public Boolean checkLogin(String username, String token) {
-        return stringRedisTemplate.opsForHash().get(USER_LOGIN_KEY + username, token) != null;
-    }
-
-    /**
-     * 用户登出：登录态有效时删除 Redis 中的登录缓存，否则抛出异常。
-     */
-    @Override
-    public void logout(String username, String token) {
-        // （1）登录态有效时删除 Redis 登录缓存
-        if (checkLogin(username, token)) {
-            stringRedisTemplate.delete(USER_LOGIN_KEY + username);
-            return;
-        }
-        // （2）登录态无效时提示 token 不存在
-        throw new ClientException("user token does not exist or user is not logged in");
     }
 
     /**
