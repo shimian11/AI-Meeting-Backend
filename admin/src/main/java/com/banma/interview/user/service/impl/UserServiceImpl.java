@@ -122,27 +122,47 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements 
 
     /**
      * 更新当前登录用户的信息，禁止修改他人账号。
+     * 本期不做个人中心页面，但接口保留——后续「设置/修改密码」走这里。
+     *步骤:
+     *   校验请求体与登录态
+     *   禁止改他人（username 强制为当前登录者）
+     *   密码必须重新 BCrypt 哈希；未传密码则置 null 让 MyBatis-Plus 忽略该字段
+     *
      */
     @Override
     public void update(UserUpdateReqDTO requestParam, String currentUsername) {
-        // （1）校验请求体与登录用户非空
+        // 步骤 1：校验请求体与登录用户非空
         if (requestParam == null) {
             throw new ClientException("request body cannot be empty");
         }
         if (StrUtil.isBlank(currentUsername)) {
             throw new ClientException("current user is not logged in");
         }
-        // （2）禁止修改其他用户的信息
+        // 步骤 2：禁止修改其他用户的信息
         if (StrUtil.isNotBlank(requestParam.getUsername()) && !currentUsername.equals(requestParam.getUsername())) {
             throw new ClientException("no permission to update other users");
         }
 
-        // （3）以当前用户名为条件更新用户记录
-        requestParam.setUsername(currentUsername);
+        // 步骤 3：组装更新对象（关键：密码必须哈希后再入库）
+        UserDO updateDO = BeanUtil.toBean(requestParam, UserDO.class);
+        // username 是身份锚点，不允许改（下游 created_by / 审计日志都挂在它上面）
+        updateDO.setUsername(currentUsername);
+
+        if (StrUtil.isNotBlank(requestParam.getPassword())) {
+            // 传了密码 → BCrypt 哈希。
+            // 若沿用原实现（BeanUtil 直接拷贝），明文会写进库，
+            // 之后登录时 passwordEncoder.matches(输入, 明文) 恒为 false —— 用户改完密码就再也登不进去，且不报错
+            updateDO.setPassword(passwordEncoder.encode(requestParam.getPassword()));
+        } else {
+            // 没传密码 → 置 null。MyBatis-Plus 的 update 默认跳过 null 字段，等于"不修改密码"
+            updateDO.setPassword(null);
+        }
+
         LambdaUpdateWrapper<UserDO> updateWrapper = Wrappers.lambdaUpdate(UserDO.class)
                 .eq(UserDO::getUsername, currentUsername);
-        baseMapper.update(BeanUtil.toBean(requestParam, UserDO.class), updateWrapper);
+        baseMapper.update(updateDO, updateWrapper);
     }
+
 
     /**
      * 校验密码
