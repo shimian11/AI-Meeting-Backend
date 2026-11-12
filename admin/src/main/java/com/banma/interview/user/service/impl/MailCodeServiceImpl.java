@@ -75,7 +75,7 @@ class MailCodeServiceImpl implements MailCodeService {
         stringRedisTemplate.opsForValue().set(
                 String.format(KEY_CODE, scene, email),
                 code,
-                Duration.ofSeconds(codeTtlMinutes)
+                Duration.ofMinutes(codeTtlMinutes)
         );
         //每次发码都重置失败计数
         stringRedisTemplate.delete(String.format(KEY_FAILS, scene, email));
