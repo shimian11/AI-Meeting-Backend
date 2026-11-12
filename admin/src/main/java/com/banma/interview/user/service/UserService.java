@@ -24,7 +24,6 @@ import com.banma.interview.user.api.io.req.UserLoginReqDTO;
 import com.banma.interview.user.api.io.req.UserPageReqDTO;
 import com.banma.interview.user.api.io.req.UserRegisterReqDTO;
 import com.banma.interview.user.api.io.req.UserUpdateReqDTO;
-import com.banma.interview.user.api.io.resp.UserLoginRespDTO;
 import com.banma.interview.user.api.io.resp.UserPageRespDTO;
 import com.banma.interview.user.api.io.resp.UserRespDTO;
 
