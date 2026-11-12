@@ -18,7 +18,6 @@
     <spring-boot.version>3.4.4</spring-boot.version>
     <spring-cloud.version>2024.0.0</spring-cloud.version>
     <spring-cloud-alibaba.version>2022.0.0.0-RC2</spring-cloud-alibaba.version>
-    <spring-ai.version>1.0.0</spring-ai.version>
     <mybatis-spring-boot-starter.version>3.5.9</mybatis-spring-boot-starter.version>
     <jjwt.version>0.9.1</jjwt.version>
     <fastjson2.version>2.0.36</fastjson2.version>
@@ -56,14 +55,6 @@
         <groupId>com.yomahub</groupId>
         <artifactId>liteflow-spring-boot-starter</artifactId>
         <version>${liteflow.version}</version>
-        <type>pom</type>
-        <scope>import</scope>
-      </dependency>
-
-      <dependency>
-        <groupId>org.springframework.ai</groupId>
-        <artifactId>spring-ai-bom</artifactId>
-        <version>${spring-ai.version}</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -140,24 +131,10 @@
     </dependency>
   </dependencies>
 
-  <repositories>
-    <repository>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-      <id>spring-milestones</id>
-      <name>Spring Milestones</name>
-      <url>https://repo.spring.io/milestone</url>
-    </repository>
-    <repository>
-      <releases>
-        <enabled>false</enabled>
-      </releases>
-      <id>spring-snapshots</id>
-      <name>Spring Snapshots</name>
-      <url>https://repo.spring.io/snapshot</url>
-    </repository>
-  </repositories>
+  <!-- 2026-11-12 删除 spring-milestones / spring-snapshots 仓库声明：
+       它们原本只为 Spring AI 1.0.0 的里程碑版本服务。Spring AI 依赖已全部移除后，
+       这两个仓库仍会让 Maven 对每个依赖先向 repo.spring.io 试探（超时约 1 秒/次），
+       再回落阿里云 —— 一次构建因此多花十分钟。删掉后只走 central（已被镜像到阿里云）。 -->
 
   <build>
     <plugins>
