@@ -2,9 +2,7 @@ package com.banma.interview.user.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.lang.UUID;
 import cn.hutool.core.util.StrUtil;
-import com.alibaba.fastjson2.JSON;
 import com.banma.interview.user.service.MailCodeService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
@@ -21,7 +19,6 @@ import com.banma.interview.user.api.io.req.UserLoginReqDTO;
 import com.banma.interview.user.api.io.req.UserPageReqDTO;
 import com.banma.interview.user.api.io.req.UserRegisterReqDTO;
 import com.banma.interview.user.api.io.req.UserUpdateReqDTO;
-import com.banma.interview.user.api.io.resp.UserLoginRespDTO;
 import com.banma.interview.user.api.io.resp.UserPageRespDTO;
 import com.banma.interview.user.api.io.resp.UserRespDTO;
 import com.banma.interview.user.service.UserService;
@@ -31,16 +28,10 @@ import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.BeanUtils;
 import org.springframework.dao.DuplicateKeyException;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 import static com.banma.interview.common.constant.RedisCacheConstant.LOCK_USER_REGISTER_KEY;
-import static com.banma.interview.common.constant.RedisCacheConstant.USER_LOGIN_KEY;
 import static com.banma.interview.common.enums.UserErrorCodeEnum.USER_EXIST;
 import static com.banma.interview.common.enums.UserErrorCodeEnum.USER_NAME_EXIST;
 import static com.banma.interview.common.enums.UserErrorCodeEnum.USER_SAVE_ERROR;
@@ -55,7 +46,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements 
 
     private final RBloomFilter<String> userRegisterCachePenetrationBloomFilter;
     private final RedissonClient redissonClient;
-    private final StringRedisTemplate stringRedisTemplate;
     private final MailCodeService mailCodeService;
     private final PasswordEncoder passwordEncoder;
 
