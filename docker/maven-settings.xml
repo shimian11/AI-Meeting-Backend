@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Docker 构建用的 Maven 配置
+  为什么需要：容器内的 Maven 默认连 Maven Central，实测 122KB/s；
+  阿里云公共仓 2.6MB/s（快约 20 倍）。首次构建要下几百 MB 依赖，
+  不配镜像源会慢十倍以上。
+
+  位置要求：Dockerfile 里必须在 `mvn dependency:go-offline` 之前 COPY，
+  否则那一层已经用默认源下完依赖，配了也白配。
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0
+                              https://maven.apache.org/xsd/settings-1.0.0.xsd">
+
+  <mirrors>
+    <mirror>
+      <id>aliyunmaven</id>
+      <!-- 只镜像 central，不影响私有仓库（将来若有） -->
+      <mirrorOf>central</mirrorOf>
+      <name>阿里云公共仓库</name>
+      <url>https://maven.aliyun.com/repository/public</url>
+    </mirror>
+  </mirrors>
+
+</settings>

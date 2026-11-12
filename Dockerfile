@@ -8,6 +8,10 @@ FROM ${BUILDER_IMAGE} AS builder
 
 WORKDIR /app
 
+# Maven 依赖源：必须在 dependency:go-offline 之前就位，
+# 否则该层会从 Maven Central 慢速下载（实测 122KB/s vs 阿里云 2.6MB/s）
+COPY docker/maven-settings.xml /root/.m2/settings.xml
+
 COPY pom.xml .
 COPY admin/pom.xml admin/
 
