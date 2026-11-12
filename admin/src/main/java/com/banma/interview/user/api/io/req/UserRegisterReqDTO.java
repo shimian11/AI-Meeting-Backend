@@ -17,6 +17,7 @@
 
 package com.banma.interview.user.api.io.req;
 
+import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 /**
@@ -50,4 +51,10 @@ public class UserRegisterReqDTO {
      * 邮箱
      */
     private String mail;
+
+    /**
+     * 邮箱验证码（6 位数字，注册必填）
+     */
+    @NotBlank(message = "验证码不能为空")
+    private String mailCode;
 }

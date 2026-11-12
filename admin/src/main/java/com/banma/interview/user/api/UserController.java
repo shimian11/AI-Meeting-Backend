@@ -21,20 +21,21 @@ import cn.dev33.satoken.annotation.SaCheckRole;
 import cn.hutool.core.bean.BeanUtil;
 import com.banma.interview.auth.application.LoginSessionService;
 import com.banma.interview.auth.application.PermissionService;
+import com.banma.interview.common.annotation.RateLimit;
+import com.banma.interview.user.api.io.req.*;
+import com.banma.interview.user.service.MailCodeService;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.banma.interview.common.convention.annotation.CurrentUser;
 import com.banma.interview.common.convention.result.Result;
 import com.banma.interview.common.convention.result.Results;
-import com.banma.interview.user.api.io.req.UserLoginReqDTO;
-import com.banma.interview.user.api.io.req.UserPageReqDTO;
-import com.banma.interview.user.api.io.req.UserRegisterReqDTO;
-import com.banma.interview.user.api.io.req.UserUpdateReqDTO;
 import com.banma.interview.user.api.io.resp.UserActualRespDTO;
 import com.banma.interview.user.api.io.resp.UserPageRespDTO;
 import com.banma.interview.user.api.io.resp.UserRespDTO;
 import com.banma.interview.user.service.AdminPermissionService;
 import com.banma.interview.user.service.UserService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -53,12 +54,14 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/banma/v1/users")
 @RequiredArgsConstructor
+@Validated
 public class UserController {
 
     private final UserService userService;
     private final AdminPermissionService adminPermissionService;
     private final LoginSessionService loginSessionService;
     private final PermissionService permissionService;
+    private final MailCodeService mailCodeService;
 
     @GetMapping("/{username}")
     public Result<UserRespDTO> getUserByUsername(@PathVariable("username") String username) {
@@ -73,6 +76,13 @@ public class UserController {
     @GetMapping("/has-username")
     public Result<Boolean> hasUsername(@RequestParam("username") String username) {
         return Results.success(userService.hasUsername(username));
+    }
+
+    @PostMapping("/mail-code")
+    @RateLimit(limit = 10, windowSeconds = 3600, message = "当前验证码发送次数已经达到每小时上限")
+    public Result<Void> sendMailCode(@RequestBody @Valid MailCodeReqDTO requestParam){
+        mailCodeService.sendCode(requestParam.getScene(), requestParam.getEmail());
+        return Results.success();
     }
 
     @PostMapping("/register")
