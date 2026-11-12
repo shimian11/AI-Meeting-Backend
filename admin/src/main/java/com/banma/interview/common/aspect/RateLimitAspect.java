@@ -12,6 +12,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Field;
+import java.time.Duration;
 
 /**
  * 频控切面: 做次数限制
@@ -40,9 +41,17 @@ public class RateLimitAspect {
         String method = ((MethodSignature) joinPoint.getSignature()).getMethod().getName();
         String key = "rate:" + method + ":" + identity;
 
-        //2、原子计数，首次设过期时间
+        // 2、原子计数；首次（count == 1）时设 TTL = 窗口时长
+        //    为什么必须在这一刻设：只有第一次写入时 key 才刚被创建；
+        //    若错过，key 会永不过期（TTL = -1），计数只增不减，配额变成"终身一次上限"
         Long count = stringRedisTemplate.opsForValue().increment(key);
-        if(count != null && count == 1){
+        if (count != null && count == 1L) {
+            stringRedisTemplate.expire(key, Duration.ofSeconds(rateLimit.windowSeconds()));
+        }
+
+        // 3、超过上限才拦（注意是 > 不是 ==，且拦完不 reset —— 计数继续累计，
+        //    这样用户在窗口内反复重试也仍是"已超限"，不会因为被拦一次就白捡一次额度）
+        if (count != null && count > rateLimit.limit()) {
             log.warn("RateLimit 触发拦截: key={}, count={}, limit={}", key, count, rateLimit.limit());
             throw new ClientException(rateLimit.message());
         }
