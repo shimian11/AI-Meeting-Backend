@@ -42,7 +42,22 @@ public class RequestRateLimitKeyResolver {
         }
 
         String remoteAddr = trimToNull(request.getRemoteAddr());
-        return remoteAddr != null ? remoteAddr : "anonymous";
+        return remoteAddr != null ? normalizeLoopback(remoteAddr) : "anonymous";
+    }
+
+    /**
+     * 把 IPv6 回环地址归一化成 IPv4。
+     *
+     * <p>本机访问时 servlet 容器报的是 {@code 0:0:0:0:0:0:0:1}，
+     * 直接拼进限流 key 会变成
+     * {@code banma-interview:rate-limit:default:ip:0:0:0:0:0:0:0:1} 这种又长又难读的串。
+     * 归一化后是 {@code ip:127.0.0.1}——语义等价（都是本机），可读性差很多。</p>
+     */
+    private String normalizeLoopback(String ip) {
+        if ("0:0:0:0:0:0:0:1".equals(ip) || "::1".equals(ip)) {
+            return "127.0.0.1";
+        }
+        return ip;
     }
 
     private String trimToNull(String value) {
