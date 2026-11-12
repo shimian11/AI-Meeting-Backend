@@ -9,9 +9,7 @@ import lombok.Getter;
 @Getter
 public enum AiPropritiesType {
 
-    OPENAI(1, "openai", "OpenAI", "https://api.openai.com/v1"),
     DOUBAO(2, "doubao", "豆包", "https://ark.cn-beijing.volces.com/api/v3"),
-    SPARK(3, "spark", "讯飞星火", "https://spark-api-open.xf-yun.com/v1"),
     DEEPSEEK(4, "deepseek", "DeepSeek", "https://api.deepseek.com"),
     OTHER(99, "other", "其他", "");
 
@@ -51,9 +49,10 @@ public enum AiPropritiesType {
                 return t;
             }
         }
-        // 兼容旧数据
+        // 旧数据兼容：generalv3.5 是讯飞星火模型名，SPARK 类型已于 2026-11-12 随讯飞链路删除，
+        // 此处统一归到 OTHER（后续 createChatClient 会明确拒绝并提示走 Python Agent）
         if ("generalv3.5".equalsIgnoreCase(type)) {
-            return SPARK;
+            return OTHER;
         }
         return OTHER;
     }
