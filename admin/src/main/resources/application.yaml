@@ -4,6 +4,20 @@ server:
 spring:
   application:
     name: banma-interview-server
+  # ── 邮箱验证码 SMTP──
+  # 凭证走环境变量（.env 经 compose env_file 注入），yaml 不留真值
+  mail:
+    host: smtp.qq.com
+    port: 465
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_AUTH_CODE:}
+    default-encoding: UTF-8
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.ssl.enable: true          # 465 端口必须 SSL
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 5000
+      mail.smtp.writetimeout: 5000
   config:
     import: optional:classpath:interview-followup-rule.yaml
   profiles:
@@ -234,3 +248,9 @@ banma-interview:
     batch-sync-size: 100
     max-queue-size: 10000
     clean-interval-seconds: 300
+
+# ── 邮箱验证码业务参数（2026-11-11 登录改造）──
+banma:
+  mail:
+    code-ttl-minutes: 5                 # 验证码有效期（分钟）
+    send-interval-seconds: 60           # 同邮箱发送间隔（秒）
