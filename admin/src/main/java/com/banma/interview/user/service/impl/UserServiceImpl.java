@@ -23,7 +23,6 @@ import com.banma.interview.user.api.io.resp.UserPageRespDTO;
 import com.banma.interview.user.api.io.resp.UserRespDTO;
 import com.banma.interview.user.service.UserService;
 import lombok.RequiredArgsConstructor;
-import org.redisson.api.RBloomFilter;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.BeanUtils;
@@ -44,7 +43,6 @@ import static com.banma.interview.common.enums.UserErrorCodeEnum.USER_SAVE_ERROR
 @RequiredArgsConstructor
 public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements UserService {
 
-    private final RBloomFilter<String> userRegisterCachePenetrationBloomFilter;
     private final RedissonClient redissonClient;
     private final MailCodeService mailCodeService;
     private final PasswordEncoder passwordEncoder;
@@ -73,7 +71,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements 
      */
     @Override
     public Boolean hasUsername(String username) {
-        return !userRegisterCachePenetrationBloomFilter.contains(username);
+        return baseMapper.selectCount(Wrappers.lambdaQuery(UserDO.class)
+                .eq(UserDO::getUsername, username)
+                .eq(UserDO::getDelFlag, 0)) == 0;
     }
 
     /**
@@ -101,7 +101,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements 
             if(insert < 1){
                 throw new ClientException(USER_SAVE_ERROR);
             }
-            userRegisterCachePenetrationBloomFilter.add(requestParam.getUsername());
         } catch (DuplicateKeyException e) {
             throw new ClientException(USER_EXIST);
         } finally {
