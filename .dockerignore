@@ -18,3 +18,10 @@ node_modules
 docs
 test_tts_stream.html
 doubao-integration.patch
+
+# 环境变量：密钥不进构建上下文（compose 用 env_file/environment 注入，镜像内不需要）
+.env
+.env.*
+
+# AI 协作技能包（307KB，构建无关；仓库要留，镜像不要）
+skills

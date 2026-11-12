@@ -108,28 +108,19 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    # ── 配置来源：.env 文件驱动（与 Python 端同构，2026-11-12）──
+    #   .env         公共项（密钥）
+    #   .env.{env}   环境差异项（服务名 / 容器内路径 / JVM 参数）
+    # 覆盖顺序：env_file（先 .env 后 .env.{env}，后者胜）> 下方 environment（最高）
+    env_file:
+      - path: .env
+        required: false
+      - path: .env.${BANMA_ENV:-test}
+        required: false
     environment:
-      SPRING_PROFILES_ACTIVE: prod
-      MYSQL_HOST: mysql
-      MYSQL_PORT: 3306
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-banma_interview}
-      MYSQL_USERNAME: ${MYSQL_USERNAME:-root}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-}
-      MONGODB_HOST: mongo
-      MONGODB_PORT: 27017
-      MONGODB_DATABASE: ${MONGODB_DATABASE:-banma_interview}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      # 邮箱验证码（QQ SMTP）：不传这两个变量，容器内 spring.mail.username 为空，发码必失败
-      MAIL_USERNAME: ${MAIL_USERNAME:-}
-      MAIL_AUTH_CODE: ${MAIL_AUTH_CODE:-}
-      # JVM 堆：Dockerfile 默认 -Xmx2g 是给 8G 机器的；
-      # 本 VM 仅 3.8G（GNOME 还要占 ~1.5G），2g 堆会与 mysql/mongo/qdrant 抢内存直至 OOM
-      JAVA_OPTS: ${JAVA_OPTS:--Xms256m -Xmx1024m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/app/logs/}
-      BANMA_STORAGE_BASE_DIR: /app/data
-      BANMA_MULTIPART_TEMP_DIR: /app/data/temp/upload
-      BANMA_AUDIO_TEMP_DIR: /app/data/temp/audio
-      BANMA_LOG_DIR: /app/logs
+      # 只留"告诉应用自己是哪个环境"这一个变量；
+      # 具体配置项全部下沉到 .env.test，避免同一份配置在 compose 与文件里各写一遍
+      BANMA_ENV: ${BANMA_ENV:-test}
     ports:
       - "8002:8002"
     volumes:
