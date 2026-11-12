@@ -1,5 +1,8 @@
 package com.banma.interview.common.web;
 
+import cn.dev33.satoken.exception.NotLoginException;
+import cn.dev33.satoken.exception.NotPermissionException;
+import cn.dev33.satoken.exception.NotRoleException;
 import cn.hutool.core.collection.CollectionUtil;
 import cn.hutool.core.util.ReflectUtil;
 import cn.hutool.core.util.StrUtil;
@@ -72,6 +75,25 @@ public class GlobalExceptionHandler {
         }
         log.error("[{}] {} [ex] {}", request.getMethod(), request.getRequestURL().toString(), ex.toString());
         return Results.failure(ex);
+    }
+
+    /**
+     * Sa-Token 未登录：返回业务码 401（前端 client.ts 靠 code === '401'
+     * 或 message 含"登录"触发跳转，不要改成 A000xxx，否则前端识别不到）。
+     */
+    @ExceptionHandler(value = NotLoginException.class)
+    public Result notLoginExceptionHandler(HttpServletRequest request, NotLoginException ex) {
+        log.warn("[{}] {} [未登录] {}", request.getMethod(), getUrl(request), ex.getMessage());
+        return Results.failure("401", "请先登录");
+    }
+
+    /**
+     * Sa-Token 角色/权限不足：返回业务码 403。
+     */
+    @ExceptionHandler(value = {NotRoleException.class, NotPermissionException.class})
+    public Result notRoleExceptionHandler(HttpServletRequest request, Exception ex) {
+        log.warn("[{}] {} [无权限] {}", request.getMethod(), getUrl(request), ex.getMessage());
+        return Results.failure("403", "无操作权限");
     }
 
     @ExceptionHandler(value = Throwable.class)
