@@ -83,9 +83,6 @@ public class AgentPropertiesServiceImpl extends ServiceImpl<AgentPropertiesMappe
         LambdaUpdateWrapper<AgentPropertiesDO> updateWrapper = Wrappers.lambdaUpdate(AgentPropertiesDO.class)
                 .eq(AgentPropertiesDO::getId, requestParam.getId())
                 .set(AgentPropertiesDO::getAgentName, requestParam.getAgentName())
-                .set(AgentPropertiesDO::getApiSecret, requestParam.getApiSecret())
-                .set(AgentPropertiesDO::getApiKey, requestParam.getApiKey())
-                .set(AgentPropertiesDO::getApiFlowId, requestParam.getApiFlowId())
                 .set(AgentPropertiesDO::getUpdateTime, new Date());
         update(updateWrapper);
         

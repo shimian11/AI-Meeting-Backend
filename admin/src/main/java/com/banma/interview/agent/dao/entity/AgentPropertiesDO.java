@@ -23,21 +23,6 @@ public class AgentPropertiesDO {
     private String agentName;
 
     /**
-     * 鉴权密钥
-     */
-    private String apiSecret;
-
-    /**
-     * 鉴权key
-     */
-    private String apiKey;
-
-    /**
-     * 工作流id
-     */
-    private String apiFlowId;
-
-    /**
      * 创建时间
      */
     private Date createTime;

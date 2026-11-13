@@ -163,10 +163,10 @@ public class AgentMessageServiceImpl implements AgentMessageService {
                 // （2）绑定历史查询与用户消息保存
                 .historySupplier(() -> conversationMessageHistoryService.listAgentHistory(sessionId))
                 .userMessageSaver(() -> conversationMessagePersistenceService.saveAgentUserMessage(sessionId, userMessage))
-                // （3）流式执行器：加载智能体配置并调用星辰接口，将输出写入 SSE
+                // （3）流式执行器：转发 Python Agent 并把输出写入 SSE
                 .streamExecutor((historyMessages, contentAccumulator) -> {
-                    // 星辰链路已下线（2026-11-11）；通用对话 SSE 将切换到 Python Agent（6C）
-                    throw new ClientException("通用对话流式链路切换中：讯飞星辰已下线，Python Agent 将于 6C 接入");
+                    // 通用对话 SSE 尚未接入：6C 落地 BanmaAgentClient 后替换此处（单路由，ADR-017）
+                    throw new ClientException("通用对话流式链路尚未接入：等待 6C 落地 Python Agent");
                 })
                 // （4）助手消息落库，并回写会话消息数
                 .assistantMessageSaver(payload -> conversationMessagePersistenceService.saveAgentAssistantMessage(
@@ -188,24 +188,5 @@ public class AgentMessageServiceImpl implements AgentMessageService {
                 // （6）异常回调：以错误结束 emitter
                 .errorHandler(emitter::completeWithError)
                 .build());
-    }
-
-    /**
-     * 将历史消息转换为星辰接口所需的多轮对话 JSON。
-     */
-    private String buildHistoryJson(List<AgentMessageHistoryRespDTO> historyMessages) {
-        List<HashMap<String, String>> historyList = new ArrayList<>();
-        // （1）历史非空时逐条映射为 role/content 结构
-        if (CollUtil.isNotEmpty(historyMessages)) {
-            historyList = historyMessages.stream().map(history -> {
-                HashMap<String, String> item = new HashMap<>();
-                item.put("role", history.getMessageType() == 1 ? "user" : "assistant");
-                item.put("content_type", "text");
-                item.put("content", history.getMessageContent());
-                return item;
-            }).collect(Collectors.toList());
-        }
-        // （2）序列化为 JSON 字符串
-        return JSON.toJSONString(historyList);
     }
 }

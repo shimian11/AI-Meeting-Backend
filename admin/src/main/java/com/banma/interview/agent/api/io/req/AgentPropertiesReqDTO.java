@@ -10,12 +10,6 @@ public class AgentPropertiesReqDTO {
 
     private String agentName;
 
-    private String apiSecret;
-
-    private String apiKey;
-
-    private String apiFlowId;
-
     /**
      * 标签代码列表，对应AgentTagType枚举的code值
      */

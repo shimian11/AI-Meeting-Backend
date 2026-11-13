@@ -210,12 +210,12 @@ public class InterviewEvaluationService {
         }
 
         log.info(
-                "Workflow request stage={}, sessionId={}, requestId={}, questionNumber={}, flowId={}, params={}",
+                "AI request stage={}, sessionId={}, requestId={}, questionNumber={}, agent={}, params={}",
                 stage,
                 sessionId,
                 requestId,
                 questionNumber,
-                agent == null ? null : agent.getApiFlowId(),
+                agent == null ? null : agent.getAgentName(),
                 JSON.toJSONString(debugView)
         );
     }

@@ -22,7 +22,6 @@ import java.util.concurrent.Callable;
 @RequiredArgsConstructor
 public class InterviewAiInvoker {
 
-    /** 星辰（讯飞）AI 客户端，降级通道一期不启用 */
     /** AI 调用治理（Resilience4j 装饰器链） */
     private final AiCallGuardService aiCallGuardService;
     /** 分布式 single-flight（Redis 协调 + 回放） */
@@ -223,9 +222,9 @@ public class InterviewAiInvoker {
         // （1）创建响应缓冲，用于拼接流式返回片段
         StringBuilder aiResponse = new StringBuilder();
         // （2）会话 id 为空时生成临时标识，随后走底层对话接口
-        // 星辰链路已下线（2026-11-11）。本类保留守卫/单飞编排骨架，
-        // 6C 时 doChat 改写为 BanmaAgentClient 转发 Python /v1/agents/*。
+        // 本类只保留守卫 / single-flight / 熔断骨架，真正的模型调用尚未接入。
+        // 6C 时把这里替换为 BanmaAgentClient 转发 Python /v1/agents/*（单路由，ADR-017）。
         throw new UnsupportedOperationException(
-                "讯飞星辰已下线：AI 调用将切换至 Python Agent（6C 实现双路由）");
+                "AI 调用尚未接入：等待 6C 落地 BanmaAgentClient（Python Agent 单路由）");
     }
 }
