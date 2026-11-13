@@ -10,10 +10,17 @@ public class AgentPropertiesRespDTO {
 
     private String agentName;
 
-    private String apiSecret;
+    /**
+     * 调用链类型：PYTHON（自研出题官）| XINGCHEN（讯飞星辰）
+     * <p>控制台需要展示"这个 agent 走哪条链路"，是非敏感开关，可以返回。</p>
+     */
+    private String agentType;
 
-    private String apiKey;
-
+    /**
+     * 讯飞工作流 id。
+     *
+     * <p>不是密钥（泄漏也调不动接口，还要 apiKey），7A 清列时一并移除。</p>
+     */
     private String apiFlowId;
 
     /**
