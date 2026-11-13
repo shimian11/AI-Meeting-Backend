@@ -20,7 +20,7 @@ import java.time.Duration;
  * WebClient 是响应式、非阻塞的；而 RestClient 是同步、阻塞的
  */
 @Configuration
-@EnableConfigurationProperties(AgentClientProperties.class)
+@EnableConfigurationProperties(AgentClientProperties.class)//创建AgentClientProperties这个bean
 public class AgentClientConfiguration {
 
     @Bean("banmaAgentWebClient")
