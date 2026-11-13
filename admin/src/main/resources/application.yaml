@@ -129,6 +129,17 @@ banma-interview:
       thread-name-prefix: banma-query-
     scheduled-pool-size: 8
     scheduled-thread-name-prefix: banma-schedule-
+  # ── Python Agent 客户端（6B）──
+  # 前端只调 Java，Java 用这里的地址与令牌去调 Python（ADR-017）
+  agent-client:
+    base-url: ${BANMA_AGENT_BASE_URL:}
+    token: ${BANMA_AGENT_TOKEN:}
+    connect-timeout-millis: 2000
+    response-timeout-millis: 70000
+    max-connections: 32
+    pending-acquire-max-count: 64
+    max-in-memory-size-kb: 4096
+
   agent-binding:
     general-agent-chat: ${BANMA_AGENT_GENERAL_CHAT:通用智能体}
     interview-question-extraction: ${BANMA_AGENT_INTERVIEW_QUESTION_EXTRACTION:面试出题官}
