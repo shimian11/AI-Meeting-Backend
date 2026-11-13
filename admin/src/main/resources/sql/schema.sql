@@ -54,16 +54,16 @@ CREATE INDEX idx_username ON admin_permission (username);
 -- ============================================================
 
 -- 智能体配置表：每个 Agent 一行，行为由数据驱动
--- agent_type 为 6C 双路由数据开关（PYTHON=BanmaAgentClient / XINGCHEN=旧链路）
+-- 智能体配置表
+-- 2026-11-13（ADR-017）：删除 api_secret / api_key / api_flow_id / agent_type 四列。
+--   前三个是讯飞星辰遗留（只写不读，且 apiKey 曾随查询接口明文返回）；
+--   agent_type 是双路由开关，星辰通道已整体下线，开关无意义。
+-- 凭证统一存 .env（BANMA_DEEPSEEK_API_KEY 等），本表不存任何密钥。
 CREATE TABLE agent_properties
 (
     id          BIGINT AUTO_INCREMENT COMMENT 'ID'
         PRIMARY KEY,
     agent_name  VARCHAR(256) NULL COMMENT '智能体名称',
-    agent_type  VARCHAR(16)  NOT NULL DEFAULT 'XINGCHEN' COMMENT '调用链类型：PYTHON | XINGCHEN（6A）',
-    api_secret  VARCHAR(256) NULL COMMENT '鉴权密钥（讯飞遗留，7A 后评估清列）',
-    api_key     VARCHAR(512) NULL COMMENT '鉴权key（讯飞遗留，7A 后评估清列）',
-    api_flow_id VARCHAR(256) NULL COMMENT '工作流id（讯飞遗留）',
     create_time DATETIME     NULL COMMENT '创建时间',
     update_time DATETIME     NULL COMMENT '修改时间',
     del_flag    TINYINT(1)   NULL COMMENT '删除标识 0：未删除 1：已删除'
