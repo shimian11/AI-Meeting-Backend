@@ -1,10 +1,15 @@
 package com.banma.interview.interview.flow.answer;
 
+import cn.hutool.core.lang.UUID;
 import cn.hutool.core.util.StrUtil;
 import com.alibaba.fastjson2.JSON;
 import com.banma.interview.agent.dao.entity.AgentPropertiesDO;
+import com.banma.interview.common.convention.exception.ClientException;
 import com.banma.interview.interview.application.guard.core.InterviewAiGuardException;
 import com.banma.interview.interview.application.guard.core.InterviewAiGuardStage;
+import com.banma.interview.interview.infrastructure.client.BanmaAgentClient;
+import com.banma.interview.interview.infrastructure.client.dto.EvaluationReqDTO;
+import com.banma.interview.interview.infrastructure.client.dto.EvaluationRespDTO;
 import com.banma.interview.interview.shared.InterviewAiInvoker;
 import com.banma.interview.interview.shared.InterviewResponseParser;
 import com.banma.interview.interview.service.InterviewQuestionCacheService;
@@ -52,6 +57,8 @@ public class InterviewEvaluationService {
     private final InterviewAiInvoker interviewAiInvoker;
     /** AI 响应防御式解析（剥围栏、别名取值、补默认值） */
     private final InterviewResponseParser interviewResponseParser;
+    /** Python Agent 客户端 */
+    private final BanmaAgentClient banmaAgentClient;
 
     /**
      * Evaluate current answer by scorer workflow and return normalized result fields.
@@ -64,13 +71,26 @@ public class InterviewEvaluationService {
             String questionContent,
             String answerContent,
             AgentPropertiesDO scorerAgent) {
+        //（1）优先走python
+        try {
+            Map<String, Object> agentResult = evaluateViaAgent(
+                    sessionId, requestId, questionNumber, questionContent, answerContent);
+            if(agentResult != null && !agentResult.isEmpty()){
+                return normalizeScorerResult(agentResult);
+            }
+        }catch (InterviewAiGuardException e){
+            // 熔断/限流是「系统在保护自己」，不能降级成静默失败，否则会持续打挂掉的依赖
+            throw e;
+        } catch (Exception e) {
+            log.warn("Agent evaluation failed, fallback to legacy path, sessionId: {}", sessionId, e);
+        }
 
-        // （1）先走评分工作流（带参数化上下文），拿标准结构化评分。
+        // （2）旧路径兜底：工作流 → prompt 直评（doChat 未接入前必然失败，属预期）
         Map<String, Object> evaluationResult = evaluateAnswerByScorerAgent(
                 sessionId, requestId, questionNumber, questionContent, answerContent, scorerAgent);
         // Fallback when scorer workflow parsing fails.
         if (evaluationResult == null || evaluationResult.isEmpty()) {
-            // （2）工作流解析失败时降级到 prompt 直评，保证主链路可继续。
+            // （3）工作流解析失败时降级到 prompt 直评，保证主链路可继续。
             String evaluationPrompt = String.format(
                     "You are a technical interview evaluator. Score the candidate answer and return strict JSON only.\n" +
                             "Question: %s\n" +
@@ -110,11 +130,83 @@ public class InterviewEvaluationService {
             return null;
         }
 
-        // （3）最后统一字段归一化，补全 followUp/feedback 等默认值。
+        // （4）最后统一字段归一化，补全 followUp/feedback 等默认值。
         Map<String, Object> normalized = normalizeScorerResult(evaluationResult);
         inferFollowUpNeededIfMissing(normalized);
         ensureDefaultEvaluationFields(normalized);
         return normalized;
+    }
+
+    /**
+     * 走 Python 评分官评分
+     * <p><b>为什么不把 DTO 直接序列化成 JSON</b>：本工程 JSON 用 fastjson2，它只认
+     * {@code @JSONField}、不认 Jackson 的 {@code @JsonProperty}——直接
+     * {@code JSON.toJSONString(dto)} 会输出 {@code missingPoints} 这类 camelCase 键，
+     * 而下游 {@code parseEvaluationResult} 按 {@code missing_points} 取值就会落空。
+     * 因此这里显式组装 Map，键名与解析器约定严格一致。</p>
+     *
+     * @param sessionId       会话 id
+     * @param requestId       上游请求 id，作为 traceId 复用，便于 Java/Python 日志对账
+     * @param questionNumber  题号
+     * @param questionContent 题干
+     * @param answerContent   候选人作答
+     * @return 归一化前的评分字段（score / feedback / missing_points / follow_up_needed / follow_up_question）
+     */
+    private Map<String, Object> evaluateViaAgent(
+            String sessionId,
+            String requestId,
+            String questionNumber,
+            String questionContent,
+            String answerContent
+    ) throws Exception {
+        // (1) 简历上下文，将评分约束为：回答 + 简历 + 回答要点
+        String resumeContextText = buildResumeContextText(
+                interviewQuestionCacheService.getSessionResumeContext(sessionId)
+        );
+
+        // (2) 组装请求
+        EvaluationReqDTO request = new EvaluationReqDTO();
+        request.setTraceId(StrUtil.blankToDefault(requestId, UUID.randomUUID().toString()));
+        request.setSessionId(sessionId);
+        request.setQuestion(StrUtil.blankToDefault(questionContent, ""));
+        request.setAnswer(StrUtil.blankToDefault(answerContent, ""));
+
+        // resume_digest 是 List<String>：整段上下文作为一个元素传入即可（prompt 内部会用「；」拼接），
+        // 空串时传空列表——传 null 会被 Pydantic 判为类型错误（422）
+        request.setResumeDigest(StrUtil.isBlank(resumeContextText)
+                ? Collections.emptyList()
+                : Collections.singletonList(resumeContextText));
+
+        // standard 暂无数据源 TODO
+        request.setStandard(Collections.emptyList());
+
+        //（3）走守卫链：key 与旧路径完全一致，保证同一答案不会重复调模型
+        String json = interviewAiInvoker.callAiSyncWithCallable(
+                InterviewAiGuardStage.INTERVIEW_EVALUATION,
+                interviewAiInvoker.buildSingleFlightKey(
+                        InterviewAiGuardStage.INTERVIEW_EVALUATION,
+                        sessionId,
+                        questionNumber,
+                        answerContent),
+                () -> {
+                    EvaluationRespDTO response = banmaAgentClient.runEvaluation(request);
+                    if (response == null) {
+                        throw new ClientException("评分服务返回空响应");
+                    }
+                    Map<String, Object> mapped = new LinkedHashMap<>();
+                    mapped.put(KEY_SCORE, response.getScore());
+                    mapped.put(KEY_FEEDBACK, response.getFeedback());
+                    mapped.put(KEY_MISSING_POINTS,
+                            response.getMissingPoints() == null
+                                    ? Collections.emptyList()
+                                    : response.getMissingPoints());
+                    mapped.put(KEY_FOLLOW_UP_NEEDED, Boolean.TRUE.equals(response.getFollowUpNeeded()));
+                    mapped.put(KEY_FOLLOW_UP_QUESTION, response.getFollowUpQuestion());
+                    return JSON.toJSONString(mapped);
+                });
+
+        //（4）使用解析器：剥代码围栏、别名取值、补默认值
+        return interviewResponseParser.parseEvaluationResult(json);
     }
 
     /**

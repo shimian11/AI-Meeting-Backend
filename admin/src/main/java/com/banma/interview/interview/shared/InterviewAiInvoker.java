@@ -155,6 +155,20 @@ public class InterviewAiInvoker {
     }
 
     /**
+     * 以自定义调用体走守卫链（single-flight + 熔断 + 按 stage 超时）。
+     *
+     * @param stage           阶段名，决定超时与熔断参数
+     * @param singleFlightKey 幂等键，同键并发只执行一次
+     * @param task            实际调用体
+     * @return 调用体返回的 JSON 字符串
+     */
+    public String callAiSyncWithCallable(String stage, String singleFlightKey, Callable<String> task) throws Exception {
+        // （1）委托给内部守卫链，本方法只做对外契约与文档
+        return guardedCall(stage, singleFlightKey, task);
+    }
+
+
+    /**
      * 构建包含阶段、会话、题号与回答哈希的 single-flight 键。
      *
      * @param stage 调用阶段
