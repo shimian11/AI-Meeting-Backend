@@ -27,8 +27,8 @@ public class EvaluationRespDTO {
     /**
      * 评价反馈
      */
-    @JsonProperty("feedBack")
-    private String feedBack;
+    @JsonProperty("feedback")
+    private String feedback;
 
     /**
      * 遗漏要点
