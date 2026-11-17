@@ -29,8 +29,6 @@ public class SaTokenAuthInterceptorConfig implements WebMvcConfigurer {
                 .notMatch("/api/banma/v1/users/check-login")
                 // 发验证码在注册之前，用户尚未登录，必须放行
                 .notMatch("/api/banma/v1/users/mail-code")
-                .notMatch("/api/banma/v1/ai/doubao/**")
-                .notMatch("/api/banma/v1/ai/roleplay/**")
                 .check(StpUtil::checkLogin)
         )).addPathPatterns("/**");
     }
