@@ -23,7 +23,6 @@ public interface InterviewRecordService extends IService<InterviewRecordDO> {
 
     /**
      * 分页查询用户面试记录
-     * @param username 用户名
      * @param requestParam 分页查询参数
      * @return 分页结果
      */
@@ -32,7 +31,6 @@ public interface InterviewRecordService extends IService<InterviewRecordDO> {
     /**
      * 根据会话ID获取面试记录
      * @param sessionId 会话ID
-     * @param username 当前登录用户名
      * @return 面试记录
      */
     InterviewRecordRespDTO getBySessionId(String sessionId, Long userId);
@@ -40,7 +38,6 @@ public interface InterviewRecordService extends IService<InterviewRecordDO> {
     /**
      * 从Redis保存面试记录
      * @param sessionId 会话ID
-     * @param username 当前登录用户名
      */
     void saveInterviewRecordFromRedis(String sessionId, Long userId);
     
