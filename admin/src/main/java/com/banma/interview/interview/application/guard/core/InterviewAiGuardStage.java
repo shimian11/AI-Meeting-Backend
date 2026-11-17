@@ -1,7 +1,7 @@
 package com.banma.interview.interview.application.guard.core;
 
 /**
- * Interview AI guard stage names.
+ * 面试AI的守卫阶段名称
  */
 public final class InterviewAiGuardStage {
 
