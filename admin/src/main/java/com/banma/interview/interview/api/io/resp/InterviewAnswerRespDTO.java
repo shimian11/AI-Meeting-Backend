@@ -2,6 +2,8 @@ package com.banma.interview.interview.api.io.resp;
 
 import lombok.Data;
 
+import java.util.List;
+
 /**
  * 面试题回答响应DTO
  */
@@ -67,6 +69,24 @@ public class InterviewAnswerRespDTO {
      * 是否已完成面试
      */
     private Boolean finished;
+
+    /**
+     * 缺失要点（逐条），供前端展示"没答到什么"。
+     */
+    private List<String> missingPoints;
+
+    /**
+     * 本题是否需要追问。
+     *
+     * <p>与 {@code isFollowUp} 的区别：{@code isFollowUp} 表示"当前这题本身是追问"，
+     * 本字段表示"答完这题后是否应该继续追问"。</p>
+     */
+    private Boolean followUpNeeded;
+
+    /**
+     * 追问问题；{@code followUpNeeded=true} 时非空。
+     */
+    private String followUpQuestion;
 
     /**
      * 初始化默认响应，避免每次手动 set 基础状态。
