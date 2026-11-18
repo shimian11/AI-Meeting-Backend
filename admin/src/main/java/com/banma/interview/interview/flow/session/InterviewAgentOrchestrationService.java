@@ -1,5 +1,6 @@
 package com.banma.interview.interview.flow.session;
 
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import com.banma.interview.interview.api.io.req.DemeanorEvaluationReqDTO;
 import com.banma.interview.interview.api.io.req.InterviewAnswerReqDTO;
@@ -12,7 +13,11 @@ import com.banma.interview.interview.application.runtime.InterviewSessionRuntime
 import com.banma.interview.interview.application.runtime.InterviewRuntimeRehydrateScope;
 import com.banma.interview.interview.flow.answer.InterviewAnswerPipeline;
 import com.banma.interview.interview.flow.answer.InterviewQuestionLockService;
+import com.banma.interview.interview.infrastructure.client.BanmaAgentClient;
+import com.banma.interview.interview.infrastructure.client.dto.QuestionOfficerReqDTO;
+import com.banma.interview.interview.infrastructure.client.dto.QuestionOfficerRespDTO;
 import com.banma.interview.interview.service.InterviewQuestionCacheService;
+import com.banma.interview.interview.service.InterviewQuestionService;
 import com.banma.interview.interview.service.model.InterviewFlowState;
 import com.banma.interview.interview.service.model.InterviewRuntimeLoadMode;
 import com.banma.interview.interview.service.model.InterviewTurnLog;
@@ -22,8 +27,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
 import org.springframework.stereotype.Service;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Interview orchestration service, including main-question and follow-up restoration.
@@ -44,6 +51,13 @@ public class InterviewAgentOrchestrationService implements InterviewWorkflowServ
     private final InterviewQuestionLockService interviewQuestionLockService;
     /** 运行态热冷快照重水化 */
     private final InterviewSessionRuntimeRehydrateService runtimeRehydrateService;
+    /** 题目主数据（DB 落库与回补） **/
+    private final InterviewQuestionService  interviewQuestionService;
+    /** Python Agent 客户端 */
+    private final BanmaAgentClient banmaAgentClient;
+
+    /** 出题意图标识：只有该意图才产生题目并需要落库 */
+    private static final String INTENT_GENERATE = "GENERATE";
 
     /**
      * 编排入口：提取链路由题目提取服务完成。
@@ -52,6 +66,30 @@ public class InterviewAgentOrchestrationService implements InterviewWorkflowServ
         // 讯飞版出题提取已下线（2026-11-11）；出题链路由 Python 出题官承接（前端 7C2 已直连验证）
         throw new UnsupportedOperationException(
                 "讯飞出题链路已下线：出题走 Python Agent（/v1/agents/question-officer/run）");
+    }
+
+    /**
+     * 调 Python 出题官并把结果落库（实现 {@link InterviewWorkflowService#runQuestionOfficer}）。
+     *
+     * <p><b>落库不造轮子</b>：DB 走 {@code upsertStructuredExtraction}（题目主数据 + 缓存回补来源），
+     * 缓存走 {@code cacheInterviewQuestions}（答题 Pipeline 直接读），游标走 {@code ensureInitialized}。</p>
+     *
+     * @param requestParam 出题请求（sessionId 必填）
+     * @param userName     当前登录用户名
+     * @return Python 出题官的原始响应
+     */
+    @Override
+    public QuestionOfficerRespDTO runQuestionOfficer(QuestionOfficerReqDTO requestParam, String userName) {
+        // (1)traceId 由服务端生成
+        requestParam.setTraceId(UUID.randomUUID().toString());
+
+        //(2) 调用Python出题官agent
+        QuestionOfficerRespDTO response = banmaAgentClient.runQuestionOfficer(requestParam);
+
+        //(3) 出题结果落库
+        persistQuestionSet(requestParam, response, userName);
+
+        return response;
     }
 
     /**
@@ -149,6 +187,79 @@ public class InterviewAgentOrchestrationService implements InterviewWorkflowServ
     public String evaluateDemeanor(DemeanorEvaluationReqDTO reqDTO) {
         // 神态官一期不做（ADR-009），讯飞依赖已随 2026-11-11 清理移除；二期按 Python Agent 方案重建
         throw new UnsupportedOperationException("神态评估一期未启用（ADR-009）");
+    }
+
+    /**
+     * 落库：题目主数据 → Redis 缓存 → 答题游标。
+     * @param request  出题请求（取 sessionId / resumeUrl / directionDefault）
+     * @param response Python 出题响应
+     * @param userName 当前登录用户名
+     */
+    private void persistQuestionSet(
+            QuestionOfficerReqDTO request,
+            QuestionOfficerRespDTO response,
+            String userName){
+        // （1）只有真实出题才落库：闲聊分支（SMALL_TALK）没有题目
+        if(response == null || !INTENT_GENERATE.equals(response.getIntent())
+                    || CollUtil.isEmpty(response.getQuestions())) {
+            return;
+        }
+
+        String sessionId = request.getSessionId();
+        if(StrUtil.isBlank(sessionId)) {
+            log.warn("出题结果未落库：sessionId 为空, traceId={}", response.getTraceId());
+            return;
+        }
+
+        //(2) 已有答题进度时跳过，避免覆盖题目导致游标与题干错位
+        InterviewFlowState flow = interviewFlowStateMachine.current(sessionId);
+        if(flow != null && flow.getCurrentIndex() != null && flow.getCurrentIndex() > 0) {
+            log.warn("会话已有答题进度，跳过题目覆盖: sessionId={}, currentIndex={}",
+                    sessionId, flow.getCurrentIndex());
+            return;
+        }
+
+        // （3）简历上下文：评分官据此判断候选人背景；同时作为原始响应兜底写入 DB
+        Map<String, Object> resumeContext = buildResumeContext(request, response);
+
+        // （4）题目主数据落库
+        interviewQuestionService.upsertStructuredExtraction(
+                sessionId,
+                userName,
+                null,
+                request.getResumeUrl(),
+                response.getQuestions(),
+                response.getQuestions(),
+                response.getResumeScore(),
+                response.getResumeType(),
+                resumeContext);
+
+        // （5）写 Redis：答题 Pipeline 的 stepLoadCurrentQuestion 直接读这里
+        interviewQuestionCacheService.cacheInterviewQuestions(sessionId, response.getQuestions());
+        if(CollUtil.isNotEmpty(response.getResumeSuggest())) {
+            interviewQuestionCacheService.cacheInterviewSuggestions(sessionId, response.getResumeSuggest());
+        }
+        if(response.getResumeScore() != null) {
+            interviewQuestionCacheService.cacheResumeScore(sessionId, response.getResumeScore());
+        }
+        // 此前全项目无人调用 cacheResumeContext，导致评分时 resume_digest 恒为空
+        interviewQuestionCacheService.cacheResumeContext(sessionId, resumeContext);
+
+        //（6）初始化答题游标（幂等：已存在则复用，不重置进度）
+        interviewFlowStateMachine.ensureInitialized(sessionId, response.getQuestions().size());
+
+        log.info("出题结果已落库: sessionId={}, traceId={}, questions={}, source={}",
+                sessionId, response.getTraceId(), response.getQuestions().size(), response.getQuestionsSource());
+    }
+
+    private Map<String, Object> buildResumeContext(QuestionOfficerReqDTO request, QuestionOfficerRespDTO response) {
+        Map<String, Object> context = new LinkedHashMap<>();
+        context.put("resumeType", response.getResumeType());
+        context.put("resumeScore", response.getResumeScore());
+        context.put("resumeSuggest", response.getResumeSuggest());
+        context.put("direction", request.getDirectionDefault());
+        context.put("questionsSource", response.getQuestionsSource());
+        return context;
     }
 
     /**
