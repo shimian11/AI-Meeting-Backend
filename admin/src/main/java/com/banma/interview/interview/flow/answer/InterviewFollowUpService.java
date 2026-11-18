@@ -1,48 +1,19 @@
 package com.banma.interview.interview.flow.answer;
 
 import cn.hutool.core.util.StrUtil;
-import com.alibaba.fastjson2.JSON;
-import com.banma.interview.agent.application.BusinessAgentResolver;
-import com.banma.interview.agent.application.BusinessAgentScene;
-import com.banma.interview.agent.dao.entity.AgentPropertiesDO;
-import com.banma.interview.interview.application.guard.core.InterviewAiGuardException;
-import com.banma.interview.interview.application.guard.core.InterviewAiGuardStage;
-import com.banma.interview.interview.shared.InterviewAiInvoker;
-import com.banma.interview.interview.shared.InterviewResponseParser;
-import com.banma.interview.interview.service.InterviewQuestionCacheService;
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
-
 /**
- * 面试追问服务：优先调用追问工作流生成问题，失败时回退到评分器建议。
+ * 面试追问服务：拿评分官给出的 follow_up_question 作为追问内容，按次数上限裁决。
+ *
+ * 不再调用任何 AI：评分官在评分时已针对本次答案生成追问建议
  */
+
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class InterviewFollowUpService {
-
-    private static final String KEY_AGENT_USER_INPUT = "AGENT_USER_INPUT";
-    private static final String KEY_MODE = "mode";
-    private static final String KEY_FOLLOW_UP_COUNT = "follow_up_count";
-    private static final String KEY_MAX_FOLLOW_UP = "max_follow_up";
-    private static final String KEY_QUESTION = "question";
-    private static final String KEY_RESUME_CONTEXT = "resume_context";
-    private static final String KEY_ASK_TO_USER = "ask_to_user";
-    private static final String KEY_END_INTERVIEW = "end_interview";
-
-    /** 按业务场景解析智能体配置（模型路由入口） */
-    private final BusinessAgentResolver businessAgentResolver;
-    /** 题目、流程与得分的 Redis 缓存读写 */
-    private final InterviewQuestionCacheService interviewQuestionCacheService;
-    /** AI 调用唯一入口（限流熔断 + single-flight） */
-    private final InterviewAiInvoker interviewAiInvoker;
-    /** AI 响应防御式解析（剥围栏、别名取值、补默认值） */
-    private final InterviewResponseParser interviewResponseParser;
 
     /**
      * 生成追问问题：检查追问次数上限后优先调用工作流，失败时回退到评分器建议问题。
@@ -74,138 +45,12 @@ public class InterviewFollowUpService {
             return FollowUpQuestionResult.empty();
         }
 
-        String generatedQuestion = null;
-        try {
-            // （3）优先调用追问工作流生成更针对性的追问。
-            AgentPropertiesDO agentProperties = businessAgentResolver.resolveRequired(BusinessAgentScene.INTERVIEW_QUESTION_ASKING);
-            generatedQuestion = invokeFollowUpWorkflow(
-                    sessionId,
-                    requestId,
-                    currentQuestion,
-                    answerContent,
-                    safeCurrentFollowUpCount,
-                    safeMaxFollowUp,
-                    agentProperties
-            );
-        } catch (Exception ex) {
-            log.warn("Follow-up agent unavailable, fallback to scorer suggestion, sessionId={}", sessionId, ex);
-        }
-
-        // （4）工作流失败时回退到评分器建议问题，仍可继续流程。
-        String questionContent = StrUtil.isNotBlank(generatedQuestion) ? generatedQuestion : sanitizedFallbackQuestion;
-        if (StrUtil.isBlank(questionContent)) {
-            return FollowUpQuestionResult.empty();
-        }
+        // （3）追问文本直接用评分官给出的建议问题
+        //     评分官的 follow_up_question 已针对本次答案生成；旧追问工作流随星辰删除，
+        //     再调一次只会白跑、抛异常、刷一条 warn
+        String questionContent = sanitizedFallbackQuestion;
 
         return new FollowUpQuestionResult(questionNumber, questionContent, safeCurrentFollowUpCount + 1);
-    }
-
-    /**
-     * 调用追问工作流生成追问文本，任何异常或结束标记均返回 null 由上层回退。
-     */
-    private String invokeFollowUpWorkflow(
-            String sessionId,
-            String requestId,
-            String currentQuestion,
-            String answerContent,
-            int currentFollowUpCount,
-            int maxFollowUp,
-            AgentPropertiesDO agentProperties) {
-
-        // （1）入参不完整时不发起 AI 调用
-        if (agentProperties == null || StrUtil.isBlank(currentQuestion) || StrUtil.isBlank(answerContent)) {
-            return null;
-        }
-
-        try {
-            // （2）组装工作流入参并调用追问工作流
-            Map<String, Object> parameters = buildWorkflowParameters(
-                    answerContent,
-                    currentQuestion,
-                    currentFollowUpCount,
-                    maxFollowUp,
-                    buildResumeContextText(interviewQuestionCacheService.getSessionResumeContext(sessionId))
-            );
-            log.info(
-                    "Follow-up workflow request, sessionId={}, requestId={}, question={}, followUpCount={}, maxFollowUp={}",
-                    sessionId,
-                    requestId,
-                    clip(currentQuestion, 120),
-                    currentFollowUpCount,
-                    maxFollowUp
-            );
-            String workflowResponse;
-            String singleFlightKey = interviewAiInvoker.buildSingleFlightKey(
-                    InterviewAiGuardStage.INTERVIEW_FOLLOWUP,
-                    sessionId,
-                    currentQuestion,
-                    answerContent
-            );
-            workflowResponse = interviewAiInvoker.callAiSyncWithParameters(
-                    sessionId,
-                    agentProperties,
-                    parameters,
-                    InterviewAiGuardStage.INTERVIEW_FOLLOWUP,
-                    singleFlightKey
-            );
-            // （3）工作流返回错误或标记结束面试时，放弃本轮追问
-            String workflowErrorMessage = interviewResponseParser.extractWorkflowErrorMessage(workflowResponse);
-            if (StrUtil.isNotBlank(workflowErrorMessage)) {
-                log.warn("Follow-up workflow returned error, sessionId={}, message={}", sessionId, workflowErrorMessage);
-                return null;
-            }
-
-            Map<String, Object> workflowResult = interviewResponseParser.extractStructuredResult(
-                    workflowResponse,
-                    KEY_ASK_TO_USER,
-                    KEY_END_INTERVIEW
-            );
-            if (workflowResult != null && interviewResponseParser.asBoolean(workflowResult.get(KEY_END_INTERVIEW))) {
-                return null;
-            }
-
-            // （4）优先取 ask_to_user 字段，缺失时从原始响应中抽取正文
-            String askToUser = workflowResult == null ? null : interviewResponseParser.asString(workflowResult.get(KEY_ASK_TO_USER));
-            if (StrUtil.isBlank(askToUser)) {
-                askToUser = interviewResponseParser.extractContentFromInterviewResponse(workflowResponse);
-            }
-            return sanitizeFollowUpQuestion(askToUser);
-        } catch (InterviewAiGuardException ex) {
-            log.warn("Follow-up workflow fast-failed, sessionId={}, code={}", sessionId, ex.getErrorCode());
-            return null;
-        } catch (Exception ex) {
-            log.warn("Failed to invoke follow-up workflow, sessionId={}", sessionId, ex);
-            return null;
-        }
-    }
-
-    /**
-     * 构建追问工作流入参：答案、模式、追问计数、题干与简历上下文。
-     */
-    private Map<String, Object> buildWorkflowParameters(
-            String answerContent,
-            String currentQuestion,
-            int currentFollowUpCount,
-            int maxFollowUp,
-            String resumeContextText) {
-        Map<String, Object> parameters = new LinkedHashMap<>();
-        parameters.put(KEY_AGENT_USER_INPUT, answerContent);
-        parameters.put(KEY_MODE, "FOLLOW_UP");
-        parameters.put(KEY_FOLLOW_UP_COUNT, currentFollowUpCount);
-        parameters.put(KEY_MAX_FOLLOW_UP, maxFollowUp);
-        parameters.put(KEY_QUESTION, currentQuestion);
-        parameters.put(KEY_RESUME_CONTEXT, resumeContextText);
-        return parameters;
-    }
-
-    /**
-     * 把简历上下文序列化为文本并截断，供工作流入参使用。
-     */
-    private String buildResumeContextText(Map<String, Object> resumeContext) {
-        if (resumeContext == null || resumeContext.isEmpty()) {
-            return "";
-        }
-        return clip(JSON.toJSONString(resumeContext), 2000);
     }
 
     /**

@@ -78,63 +78,16 @@ public class InterviewEvaluationService {
             if(agentResult != null && !agentResult.isEmpty()){
                 return normalizeScorerResult(agentResult);
             }
+            // 返回空视为无法解析：旧链路已删除，不再降级，直接让上层看到真实原因
+            throw new ClientException("评分结果为空：AI 返回无法解析");
         }catch (InterviewAiGuardException e){
             // 熔断/限流是「系统在保护自己」，不能降级成静默失败，否则会持续打挂掉的依赖
             throw e;
         } catch (Exception e) {
-            log.warn("Agent evaluation failed, fallback to legacy path, sessionId: {}", sessionId, e);
+            // 网络/超时/解析异常统一转业务错误：上层据此提示「稍后重试」
+            log.error("评分官调用失败, sessionId={}", sessionId, e);
+            throw new ClientException("AI 评分服务不可用，请稍后重试");
         }
-
-        // （2）旧路径兜底：工作流 → prompt 直评（doChat 未接入前必然失败，属预期）
-        Map<String, Object> evaluationResult = evaluateAnswerByScorerAgent(
-                sessionId, requestId, questionNumber, questionContent, answerContent, scorerAgent);
-        // Fallback when scorer workflow parsing fails.
-        if (evaluationResult == null || evaluationResult.isEmpty()) {
-            // （3）工作流解析失败时降级到 prompt 直评，保证主链路可继续。
-            String evaluationPrompt = String.format(
-                    "You are a technical interview evaluator. Score the candidate answer and return strict JSON only.\n" +
-                            "Question: %s\n" +
-                            "Answer: %s\n" +
-                            "Requirements:\n" +
-                            "1. score must be an integer in [0,100].\n" +
-                            "2. feedback must be concise and practical.\n" +
-                            "3. missing_points must be an array of strings.\n" +
-                            "4. follow_up_needed must be true or false.\n" +
-                            "5. If follow_up_needed is true, follow_up_question must be non-empty.\n" +
-                            "Output schema: {\"score\":0,\"feedback\":\"\",\"follow_up_needed\":true,\"follow_up_question\":\"\",\"missing_points\":[\"...\"]}",
-                    questionContent, answerContent
-            );
-            try {
-                String singleFlightKey = interviewAiInvoker.buildSingleFlightKey(
-                        InterviewAiGuardStage.INTERVIEW_EVALUATION,
-                        sessionId,
-                        questionNumber,
-                        answerContent
-                ) + "|fallback";
-                String aiResponse = interviewAiInvoker.callAiSync(
-                        evaluationPrompt,
-                        sessionId,
-                        scorerAgent,
-                        InterviewAiGuardStage.INTERVIEW_EVALUATION,
-                        singleFlightKey
-                );
-                evaluationResult = interviewResponseParser.parseEvaluationResult(aiResponse);
-            } catch (InterviewAiGuardException ex) {
-                throw ex;
-            } catch (Exception ex) {
-                log.warn("Prompt fallback evaluation failed, sessionId: {}", sessionId, ex);
-                return null;
-            }
-        }
-        if (evaluationResult == null) {
-            return null;
-        }
-
-        // （4）最后统一字段归一化，补全 followUp/feedback 等默认值。
-        Map<String, Object> normalized = normalizeScorerResult(evaluationResult);
-        inferFollowUpNeededIfMissing(normalized);
-        ensureDefaultEvaluationFields(normalized);
-        return normalized;
     }
 
     /**
@@ -207,109 +160,6 @@ public class InterviewEvaluationService {
 
         //（4）使用解析器：剥代码围栏、别名取值、补默认值
         return interviewResponseParser.parseEvaluationResult(json);
-    }
-
-    /**
-     * 通过评分 agent 工作流评估答案，并返回归一化后的结构化结果。
-     *
-     * @return 评分结果字段；工作流调用或解析异常时返回 null
-     */
-    private Map<String, Object> evaluateAnswerByScorerAgent(
-            String sessionId,
-            String requestId,
-            String questionNumber,
-            String questionContent,
-            String answerContent,
-            AgentPropertiesDO scorerAgent) {
-        try {
-            // （1）拼装简历上下文文本
-            String resumeContextText = buildResumeContextText(
-                    interviewQuestionCacheService.getSessionResumeContext(sessionId));
-
-            // （2）构建工作流入参并输出脱敏日志
-            Map<String, Object> parameters = buildScorerWorkflowParameters(
-                    answerContent, questionContent, resumeContextText);
-
-            logWorkflowParameters(
-                    "scorer",
-                    sessionId,
-                    requestId,
-                    questionNumber,
-                    scorerAgent,
-                    parameters
-            );
-
-            // （3）同步调用评分工作流并解析结构化结果
-            String workflowResponse = interviewAiInvoker.callAiSyncWithParameters(
-                    sessionId + "_score",
-                    scorerAgent,
-                    parameters,
-                    InterviewAiGuardStage.INTERVIEW_EVALUATION,
-                    interviewAiInvoker.buildSingleFlightKey(
-                            InterviewAiGuardStage.INTERVIEW_EVALUATION,
-                            sessionId,
-                            questionNumber,
-                            answerContent
-                    )
-            );
-            Map<String, Object> parsed = interviewResponseParser.parseEvaluationResult(workflowResponse);
-            return normalizeScorerResult(parsed);
-        } catch (InterviewAiGuardException ex) {
-            throw ex;
-        } catch (Exception ex) {
-            log.warn("Scorer workflow invocation failed, sessionId: {}", sessionId, ex);
-            return null;
-        }
-    }
-
-    /**
-     * 构建评分工作流入参：候选人答案、题干与简历上下文。
-     */
-    private Map<String, Object> buildScorerWorkflowParameters(
-            String answerContent,
-            String questionContent,
-            String resumeContextText) {
-        Map<String, Object> parameters = new LinkedHashMap<>();
-        parameters.put(KEY_AGENT_USER_INPUT, answerContent);
-        parameters.put(KEY_QUESTION, questionContent);
-        parameters.put(KEY_RESUME_CONTEXT, resumeContextText);
-        return parameters;
-    }
-
-    /**
-     * 打印工作流请求日志，对答案与简历等长文本做截断。
-     */
-    private void logWorkflowParameters(
-            String stage,
-            String sessionId,
-            String requestId,
-            String questionNumber,
-            AgentPropertiesDO agent,
-            Map<String, Object> parameters) {
-        // （1）过滤空值并截断敏感长文本，构造日志视图
-        Map<String, Object> debugView = new LinkedHashMap<>();
-        if (parameters != null) {
-            parameters.forEach((key, value) -> {
-                if (value == null) {
-                    return;
-                }
-                if (KEY_AGENT_USER_INPUT.equals(key) || KEY_RESUME_CONTEXT.equals(key)) {
-                    debugView.put(key, clip(String.valueOf(value), 300));
-                    return;
-                }
-                debugView.put(key, value);
-            });
-        }
-
-        log.info(
-                "AI request stage={}, sessionId={}, requestId={}, questionNumber={}, agent={}, params={}",
-                stage,
-                sessionId,
-                requestId,
-                questionNumber,
-                agent == null ? null : agent.getAgentName(),
-                JSON.toJSONString(debugView)
-        );
     }
 
     /**
