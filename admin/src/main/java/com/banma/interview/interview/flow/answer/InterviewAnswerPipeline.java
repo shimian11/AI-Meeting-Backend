@@ -394,6 +394,11 @@ public class InterviewAnswerPipeline {
         ctx.score = score;
         ctx.totalScore = interviewQuestionCacheService.getSessionTotalScore(ctx.sessionId);
         ctx.response.withEvaluation(score, interviewResponseParser.asString(evaluationResult.get("feedback")), ctx.totalScore);
+
+        // （5）把缺失点与追问建议写进响应：此前只用于规则链，前端拿不到
+        ctx.response.setMissingPoints(ctx.missingPoints);
+        ctx.response.setFollowUpNeeded(Boolean.TRUE.equals(ctx.followUpNeeded));
+        ctx.response.setFollowUpQuestion(ctx.followUpQuestion);
         return true;
     }
 
