@@ -2,12 +2,15 @@
 target/
 build/
 coverage/
+*.class
+.flattened-pom.xml
 
 # ===== Maven =====
 .m2/
 # 注：本项目无 mvnw（.mvn 已删）。构建方式：本机 Maven（开发）/ 容器内 Maven（Dockerfile builder 阶段，7D 部署）
 
 # ===== 运行时产物 =====
+logs/
 *.log
 *.tmp
 *.temp
@@ -18,6 +21,9 @@ uploads/
 .env
 .env.*
 !.env.example
+
+# ===== CI 配置 =====
+# .github/ 保留入库：workflow 已改为仅 workflow_dispatch 手动触发，push/PR 不自动跑
 
 # ===== IDE =====
 .idea/
