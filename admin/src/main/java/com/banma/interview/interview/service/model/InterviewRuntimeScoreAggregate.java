@@ -9,9 +9,18 @@ import lombok.Data;
 @Data
 public class InterviewRuntimeScoreAggregate {
 
+    /**
+     * 累计得分。
+     */
     private Integer scoreSum;
 
+    /**
+     * 计分次数。
+     */
     private Integer scoreCount;
 
+    /**
+     * 总分。
+     */
     private Integer totalScore;
 }

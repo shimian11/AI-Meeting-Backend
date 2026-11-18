@@ -6,8 +6,14 @@ import java.util.List;
 @Data
 public class AgentPropertiesReqDTO {
 
+    /**
+     * Agent 唯一标识 ID，为空表示新增，非空表示编辑。
+     */
     private Long id;
 
+    /**
+     * Agent 名称。
+     */
     private String agentName;
 
     /**

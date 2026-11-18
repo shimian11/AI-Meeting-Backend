@@ -4,70 +4,70 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 
 /**
- * Response payload for long-text TTS tasks.
+ * 长文本语音合成（TTS）任务响应参数。
  */
 @Data
 public class LongTextTtsTaskRespDTO {
 
     /**
-     * Xunfei session id.
+     * 讯飞会话 ID。
      */
     private String sid;
 
     /**
-     * Task id.
+     * 任务 ID。
      */
     private String taskId;
 
     /**
-     * Task status.
-     * 1: task created
-     * 2: task creation failed
-     * 3: task running
-     * 4: task execution failed
-     * 5: task completed
+     * 任务状态。
+     * 1: 任务已创建
+     * 2: 任务创建失败
+     * 3: 任务执行中
+     * 4: 任务执行失败
+     * 5: 任务已完成
      */
     private String taskStatus;
 
     /**
-     * Platform status code, `0` means success.
+     * 平台状态码，`0` 表示成功。
      */
     private Integer code;
 
     /**
-     * Platform message.
+     * 平台返回的消息。
      */
     private String message;
 
     /**
-     * Download URL for the synthesized audio after decoding.
+     * 解码后合成音频的下载地址。
      */
     @JsonIgnore
     private String audioUrl;
 
     /**
-     * Synthesized audio content encoded as Base64.
+     * Base64 编码的合成音频内容。
      */
     private String audioBase64;
 
     /**
-     * Download URL for pinyin content after decoding.
+     * 解码后拼音内容的下载地址。
      */
     @JsonIgnore
     private String pybufUrl;
 
     /**
-     * Pinyin content text.
+     * 拼音内容文本。
      */
     private String pybufContent;
 
     /**
-     * Whether the task has completed.
+     * 任务是否已完成。
      */
     private Boolean completed;
 
     /**
-     * Whether the task succeeded.
+     * 任务是否成功。
      */
     private Boolean success;
 }

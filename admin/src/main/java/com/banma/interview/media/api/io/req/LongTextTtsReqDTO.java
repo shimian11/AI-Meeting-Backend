@@ -3,63 +3,63 @@ package com.banma.interview.media.api.io.req;
 import lombok.Data;
 
 /**
- * Request payload for long-text TTS.
+ * 长文本语音合成（TTS）请求参数。
  */
 @Data
 public class LongTextTtsReqDTO {
 
     /**
-     * Text to synthesize.
+     * 需要合成的文本。
      */
     private String text;
 
     /**
-     * Voice name, default `x4_mingge`.
+     * 音色名称，默认 `x4_mingge`。
      */
     private String vcn;
 
     /**
-     * Language code, default `zh`.
+     * 语言代码，默认 `zh`。
      */
     private String language;
 
     /**
-     * Speech speed in range `[0, 100]`.
+     * 语速，取值范围 `[0, 100]`。
      */
     private Integer speed;
 
     /**
-     * Volume in range `[0, 100]`.
+     * 音量，取值范围 `[0, 100]`。
      */
     private Integer volume;
 
     /**
-     * Pitch in range `[0, 100]`.
+     * 音调，取值范围 `[0, 100]`。
      */
     private Integer pitch;
 
     /**
-     * Whether to return pinyin content, `0` or `1`.
+     * 是否返回拼音内容，`0` 或 `1`。
      */
     private Integer rhy;
 
     /**
-     * Audio encoding, default `lame` (mp3).
+     * 音频编码，默认 `lame`（mp3）。
      */
     private String audioEncoding;
 
     /**
-     * Sample rate, default `16000`.
+     * 采样率，默认 `16000`。
      */
     private Integer sampleRate;
 
     /**
-     * Timeout in seconds when waiting synchronously.
+     * 同步等待时的超时时间（秒）。
      */
     private Integer timeoutSeconds;
 
     /**
-     * Polling interval in milliseconds.
+     * 轮询间隔（毫秒）。
      */
     private Integer pollIntervalMs;
 }
