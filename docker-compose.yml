@@ -116,8 +116,7 @@ services:
     environment:
       # 只留"告诉应用自己是哪个环境"这一个变量；
       BANMA_ENV: ${BANMA_ENV:-prod}
-    ports:
-      - "8002:8002"
+    # 不映射宿主端口：Nginx 容器在同一网络内用 http://backend:8002 访问
     volumes:
       - backend-data:/app/data
       - backend-logs:/app/logs
@@ -145,8 +144,7 @@ services:
     environment:
       # ≈ spring.profiles.active：激活哪个 .env.{env}；部署配置写死，永不手敲
       BANMA_ENV: prod
-    ports:
-      - "8100:8100"
+    # 不映射宿主端口：仅 backend 容器通过 http://banma-agent-python:8100 调用
     depends_on:
       banma-qdrant:
         condition: service_healthy
