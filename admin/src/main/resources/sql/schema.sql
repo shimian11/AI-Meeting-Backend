@@ -1,18 +1,34 @@
 -- ============================================================
--- schema.sql · 全量建表（12 张）
--- 开发阶段主文件：新环境一条命令建完全部表
--- 执行顺序：整个文件一次性执行（文件内无表间依赖，可乱序）
--- 原则：只包含 CREATE TABLE / CREATE INDEX，不含 INSERT
+-- schema.sql · 全量建库 + 建表（12 张）
+--
+-- 一条命令从零到有：
+--   mysql -uroot -p < schema.sql
+--
+-- 特性：
+--   ① 自带建库（banma_interview）与 USE，无需手工建库
+--   ② 全部 CREATE TABLE IF NOT EXISTS —— 可重复执行，不会报「表已存在」，也不会删数据
+--   ③ 索引全部内联在表定义里（无独立 CREATE INDEX，避免重复执行报错）
+--   ④ 只建结构，不含 INSERT；账号通过前端注册产生
+--
+-- 历史上拆出的 migration-01/02 已删除：它们的 ALTER 项（uk_mail、agent_properties 凭证列）
+-- 已内联进本文件，新建库无需增量脚本。
 -- ============================================================
 
 SET NAMES utf8mb4;
+
+-- 建库：不存在才建；字符集显式声明，避免服务器默认值不一致
+CREATE DATABASE IF NOT EXISTS banma_interview
+    DEFAULT CHARACTER SET utf8mb4
+    DEFAULT COLLATE utf8mb4_general_ci;
+
+USE banma_interview;
 
 -- ============================================================
 -- 用户域
 -- ============================================================
 
 -- 用户表：全系统身份锚点（username = 邮箱，登录态 Redis key、各表 created_by 均挂它）
-CREATE TABLE t_user
+CREATE TABLE IF NOT EXISTS t_user
 (
     id            BIGINT AUTO_INCREMENT COMMENT 'ID'
         PRIMARY KEY,
@@ -25,13 +41,12 @@ CREATE TABLE t_user
     create_time   DATETIME     NULL COMMENT '创建时间',
     update_time   DATETIME     NULL COMMENT '修改时间',
     del_flag      TINYINT(1)   NULL COMMENT '删除标识 0：未删除 1：已删除',
-    CONSTRAINT idx_unique_username UNIQUE (username)
+    CONSTRAINT idx_unique_username UNIQUE (username),
+    CONSTRAINT uk_mail UNIQUE (mail)
 );
 
-CREATE UNIQUE INDEX uk_mail ON t_user (mail);
-
 -- 管理员权限表：权限是运营属性，独立于用户表（一人一行）
-CREATE TABLE admin_permission
+CREATE TABLE IF NOT EXISTS admin_permission
 (
     id          BIGINT AUTO_INCREMENT COMMENT 'ID'
         PRIMARY KEY,
@@ -42,12 +57,10 @@ CREATE TABLE admin_permission
     update_time DATETIME             NULL COMMENT '修改时间',
     del_flag    TINYINT(1) DEFAULT 0 NULL COMMENT '删除标识 0：未删除 1：已删除',
     CONSTRAINT idx_unique_user_id
-        UNIQUE (user_id)
+        UNIQUE (user_id),
+    KEY idx_is_admin (is_admin),
+    KEY idx_username (username)
 );
-
-CREATE INDEX idx_is_admin ON admin_permission (is_admin);
-
-CREATE INDEX idx_username ON admin_permission (username);
 
 -- ============================================================
 -- Agent 域
@@ -59,7 +72,7 @@ CREATE INDEX idx_username ON admin_permission (username);
 --   前三个是讯飞星辰遗留（只写不读，且 apiKey 曾随查询接口明文返回）；
 --   agent_type 是双路由开关，星辰通道已整体下线，开关无意义。
 -- 凭证统一存 .env（BANMA_DEEPSEEK_API_KEY 等），本表不存任何密钥。
-CREATE TABLE agent_properties
+CREATE TABLE IF NOT EXISTS agent_properties
 (
     id          BIGINT AUTO_INCREMENT COMMENT 'ID'
         PRIMARY KEY,
@@ -70,7 +83,7 @@ CREATE TABLE agent_properties
 );
 
 -- 智能体标签表：控制台筛选用
-CREATE TABLE agent_tag
+CREATE TABLE IF NOT EXISTS agent_tag
 (
     id          BIGINT AUTO_INCREMENT COMMENT 'ID'
         PRIMARY KEY,
@@ -79,17 +92,14 @@ CREATE TABLE agent_tag
     description VARCHAR(512)         NULL COMMENT '标签描述',
     create_time DATETIME             NULL COMMENT '创建时间',
     update_time DATETIME             NULL COMMENT '修改时间',
-    del_flag    TINYINT(1) DEFAULT 0 NULL COMMENT '删除标识 0：未删除 1：已删除'
+    del_flag    TINYINT(1) DEFAULT 0 NULL COMMENT '删除标识 0：未删除 1：已删除',
+    KEY idx_agent_id (agent_id),
+    KEY idx_create_time (create_time),
+    KEY idx_tag_name (tag_name)
 );
 
-CREATE INDEX idx_agent_id ON agent_tag (agent_id);
-
-CREATE INDEX idx_create_time ON agent_tag (create_time);
-
-CREATE INDEX idx_tag_name ON agent_tag (tag_name);
-
 -- 上传文件资产表：文件本体在外部存储，本表只存元数据 + 访问地址
-CREATE TABLE agent_file_asset
+CREATE TABLE IF NOT EXISTS agent_file_asset
 (
     id              BIGINT AUTO_INCREMENT COMMENT '主键ID'
         PRIMARY KEY,
@@ -108,23 +118,19 @@ CREATE TABLE agent_file_asset
     remark          VARCHAR(255)                         NULL COMMENT '备注',
     create_time     DATETIME    DEFAULT CURRENT_TIMESTAMP NULL COMMENT '创建时间',
     update_time     DATETIME    DEFAULT CURRENT_TIMESTAMP NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    del_flag        TINYINT     DEFAULT 0                NOT NULL COMMENT '删除标识：0未删除 1已删除'
+    del_flag        TINYINT     DEFAULT 0                NOT NULL COMMENT '删除标识：0未删除 1已删除',
+    KEY idx_agent_id (agent_id),
+    KEY idx_create_time (create_time),
+    KEY idx_session_id (session_id),
+    KEY idx_user_name (user_name)
 ) COMMENT '上传文件资产表' COLLATE = utf8mb4_unicode_ci;
-
-CREATE INDEX idx_agent_id ON agent_file_asset (agent_id);
-
-CREATE INDEX idx_create_time ON agent_file_asset (create_time);
-
-CREATE INDEX idx_session_id ON agent_file_asset (session_id);
-
-CREATE INDEX idx_user_name ON agent_file_asset (user_name);
 
 -- ============================================================
 -- 面试域
 -- ============================================================
 
 -- 面试记录表：状态机 INIT/IN_PROGRESS/FINISHED/EVALUATED；快照 JSON 避免报告页多表 join
-CREATE TABLE interview_record
+CREATE TABLE IF NOT EXISTS interview_record
 (
     id                    BIGINT AUTO_INCREMENT COMMENT '主键ID'
         PRIMARY KEY,
@@ -143,18 +149,14 @@ CREATE TABLE interview_record
     session_snapshot_json LONGTEXT                           NULL COMMENT '会话快照JSON（报告页一次读全量）',
     create_time           DATETIME DEFAULT CURRENT_TIMESTAMP NULL COMMENT '创建时间',
     update_time           DATETIME DEFAULT CURRENT_TIMESTAMP NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    del_flag              TINYINT  DEFAULT 0                 NOT NULL COMMENT '删除标记: 0未删除 1已删除'
+    del_flag              TINYINT  DEFAULT 0                 NOT NULL COMMENT '删除标记: 0未删除 1已删除',
+    KEY idx_create_time (create_time),
+    UNIQUE KEY uk_interview_record_user_session_del (user_id, session_id, del_flag),
+    KEY idx_session_id (session_id)
 ) COMMENT '面试记录表' COLLATE = utf8mb4_unicode_ci;
 
-CREATE INDEX idx_create_time ON interview_record (create_time);
-
-CREATE UNIQUE INDEX uk_interview_record_user_session_del
-    ON interview_record (user_id, session_id, del_flag);
-
-CREATE INDEX idx_session_id ON interview_record (session_id);
-
 -- AI 配置表：一行 = 一个模型接入点（Java 直调场景，7A 追问链用）
-CREATE TABLE ai_properties
+CREATE TABLE IF NOT EXISTS ai_properties
 (
     id                     BIGINT AUTO_INCREMENT COMMENT 'ID'
         PRIMARY KEY,
@@ -174,15 +176,13 @@ CREATE TABLE ai_properties
     update_time            DATETIME                   NULL COMMENT '修改时间',
     del_flag               TINYINT(1)    DEFAULT 0    NULL COMMENT '删除标识 0：未删除 1：已删除',
     project_id             VARCHAR(255)               NULL COMMENT '项目ID',
-    organization_id        VARCHAR(255)               NULL COMMENT '组织ID'
+    organization_id        VARCHAR(255)               NULL COMMENT '组织ID',
+    KEY idx_ai_type (ai_type),
+    KEY idx_create_time (create_time)
 ) COMMENT 'AI配置表';
 
-CREATE INDEX idx_ai_type ON ai_properties (ai_type);
-
-CREATE INDEX idx_create_time ON ai_properties (create_time);
-
 -- AI 消息媒体附件表：会话中图片/文件/音频的元数据
-CREATE TABLE ai_message_media
+CREATE TABLE IF NOT EXISTS ai_message_media
 (
     id           BIGINT AUTO_INCREMENT COMMENT 'ID'
         PRIMARY KEY,
@@ -193,17 +193,16 @@ CREATE TABLE ai_message_media
     file_name    VARCHAR(256)                NULL COMMENT '原始文件名',
     file_size    BIGINT                      NULL COMMENT '文件大小（字节）',
     content_type VARCHAR(128)                NULL COMMENT '文件MIME类型',
-    create_time  DATETIME                    NULL COMMENT '创建时间'
+    create_time  DATETIME                    NULL COMMENT '创建时间',
+    KEY idx_session_seq (session_id, message_seq)
 ) COMMENT 'AI消息媒体附件表';
-
-CREATE INDEX idx_session_seq ON ai_message_media (session_id, message_seq);
 
 -- ============================================================
 -- 题库域（6G）
 -- ============================================================
 
 -- 题库文档表：一份上传文件 = 一行；doc_id 同时是 Qdrant payload 锚点（跨库逻辑关联）
-CREATE TABLE kb_document
+CREATE TABLE IF NOT EXISTS kb_document
 (
     id          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
     doc_id      VARCHAR(64)  NOT NULL COMMENT '稳定标识，Python 侧 point id 前半',
@@ -224,7 +223,7 @@ CREATE TABLE kb_document
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT ='题库文档（6G）';
 
 -- 题库入库任务表：一次 ingest 调用 = 一行；与文档分表（文档长期/任务单次，可多次重试）
-CREATE TABLE kb_ingest_job
+CREATE TABLE IF NOT EXISTS kb_ingest_job
 (
     id          BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键',
     job_id      VARCHAR(64) NOT NULL COMMENT '前端轮询键',
@@ -246,7 +245,7 @@ CREATE TABLE kb_ingest_job
 -- ============================================================
 
 -- 控制台审计日志表：反范式设计——用户删了日志还在（审计价值恰在于此）
-CREATE TABLE admin_audit_log
+CREATE TABLE IF NOT EXISTS admin_audit_log
 (
     id          BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键',
     username    VARCHAR(64)   NOT NULL COMMENT '操作人（username=邮箱，快照不跟随用户改名）',
@@ -259,7 +258,7 @@ CREATE TABLE admin_audit_log
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT ='控制台审计日志（6G）';
 
 -- 用户用量配额表：按日聚合（流水在 Python trace，不重复记账）；双配额=次数防滥用+token防成本失控
-CREATE TABLE agent_usage_quota
+CREATE TABLE IF NOT EXISTS agent_usage_quota
 (
     id          BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键',
     username    VARCHAR(64) NOT NULL COMMENT '用户（username=邮箱）',
