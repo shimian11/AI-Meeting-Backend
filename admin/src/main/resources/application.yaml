@@ -19,14 +19,7 @@ spring:
       mail.smtp.timeout: 5000
       mail.smtp.writetimeout: 5000
   config:
-    # ── .env 分层（与 Python 端同构，2026-11-12 定稿）──
-    #   .env              公共项（≈ Python 的 .env / Spring 的 application.yml）
-    #   .env.{BANMA_ENV}  环境差异项（≈ application-{env}.yml），BANMA_ENV 取 local / test / prod
     # 覆盖顺序（后者优先）：application.yaml < .env < .env.{BANMA_ENV} < 真实环境变量
-    #
-    # 为什么写两组路径：IDEA 默认工作目录是模块目录（admin/），
-    # 而命令行在仓库根执行——`./` 与 `../` 各覆盖一种，缺的那个被 optional 忽略。
-    # [.properties] 是告诉 Spring 用 properties 语法解析这个无扩展名文件。
     import:
       - optional:classpath:interview-followup-rule.yaml
       - optional:file:./.env[.properties]
