@@ -1,5 +1,4 @@
-# 公共默认（2026-11-03）：所有服务统一「重启自恢复 + 日志限额」
-# 为什么用锚点：restart/logging 是每个容器都要的配置，写 6 遍容易漏（此前 5 个服务全都没有）
+# 公共默认：所有服务统一「重启自恢复 + 日志限额」
 x-defaults: &defaults
   restart: unless-stopped
   logging:
@@ -17,17 +16,15 @@ services:
       MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD:-}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-banma_interview}
     ports:
-      - "3306:3306"
+      - "127.0.0.1:3306:3306"
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
     volumes:
       - mysql-data:/var/lib/mysql
-      - ./admin/src/main/resources/sql/table.sql:/docker-entrypoint-initdb.d/01-table.sql:ro
-      - ./admin/src/main/resources/sql/admin_permission.sql:/docker-entrypoint-initdb.d/02-admin_permission.sql:ro
-      - ./admin/src/main/resources/sql/agent_properties.sql:/docker-entrypoint-initdb.d/03-agent_properties.sql:ro
-      - ./admin/src/main/resources/sql/ai_properties.sql:/docker-entrypoint-initdb.d/04-ai_properties.sql:ro
-      - ./admin/src/main/resources/sql/t_user.sql:/docker-entrypoint-initdb.d/05-t_user.sql:ro
+      - ./admin/src/main/resources/sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./admin/src/main/resources/sql/migration-01-mail-login.sql:/docker-entrypoint-initdb.d/02-migration-01.sql:ro
+      - ./admin/src/main/resources/sql/migration-02-drop-legacy-agent-credentials.sql:/docker-entrypoint-initdb.d/03-migration-02.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h localhost -p${MYSQL_PASSWORD:-}"]
       interval: 15s
@@ -39,7 +36,7 @@ services:
     image: ${MONGO_IMAGE:-mongo:7.0}
     container_name: banma-mongo
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
     volumes:
       - mongo-data:/data/db
     healthcheck:
@@ -53,7 +50,7 @@ services:
     image: ${REDIS_IMAGE:-redis:7.2}
     container_name: banma-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis-data:/data
@@ -63,15 +60,14 @@ services:
       timeout: 5s
       retries: 10
 
-  # Qdrant 向量库（ADR-003）：单 collection banma_questions，1024 维
-  # 服务名 = compose 内网 DNS：容器内用 http://banma-qdrant:6333；
-  # 本地开发（Python 在 Windows）用 http://192.168.100.211:6333
+  # Qdrant 向量库：单 collection banma_questions，1024 维
+  # 服务名 = compose 内网 DNS：容器内用 http://banma-qdrant:6333
   banma-qdrant:
     <<: *defaults
     image: qdrant/qdrant:v1.15.0   # 钉版本，不用 latest
     container_name: banma-qdrant
     ports:
-      - "6333:6333"                # 与其他服务一致用端口映射，访问控制交给 ufw
+      - "127.0.0.1:6333:6333"      # 只绑回环；生产由 Nginx/同宿主进程访问
     volumes:
       - qdrant-data:/qdrant/storage
     environment:
@@ -108,19 +104,18 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    # ── 配置来源：.env 文件驱动（与 Python 端同构，2026-11-12）──
+    # ── 配置来源：.env 文件驱动 ──
     #   .env         公共项（密钥）
     #   .env.{env}   环境差异项（服务名 / 容器内路径 / JVM 参数）
     # 覆盖顺序：env_file（先 .env 后 .env.{env}，后者胜）> 下方 environment（最高）
     env_file:
       - path: .env
         required: false
-      - path: .env.${BANMA_ENV:-test}
+      - path: .env.${BANMA_ENV:-prod}
         required: false
     environment:
       # 只留"告诉应用自己是哪个环境"这一个变量；
-      # 具体配置项全部下沉到 .env.test，避免同一份配置在 compose 与文件里各写一遍
-      BANMA_ENV: ${BANMA_ENV:-test}
+      BANMA_ENV: ${BANMA_ENV:-prod}
     ports:
       - "8002:8002"
     volumes:
@@ -133,26 +128,23 @@ services:
       retries: 10
       start_period: 60s
 
-  # Python Agent 服务（ADR-001/002）：无状态，仅连 LLM/Qdrant，由 Java 内网调用
-  # 服务名 = compose 内网 DNS 主机名，契约见 docs/server/03：http://banma-agent-python:8100
+  # Python Agent 服务：无状态，仅连 LLM/Qdrant，由 Java 内网调用
+  # 服务名 = compose 内网 DNS 主机名
   banma-agent-python:
     <<: *defaults
     image: ${AGENT_IMAGE:-banma-agent-python:local}
     build:
-      context: ../AI-Meeting-Agent   # 三仓同级目录（ADR-012：clone 到同一父目录）
+      context: ../AI-Meeting-Agent   # 三仓同级目录
     container_name: banma-agent-python
     env_file:
-      # Spring 多 profile 模式的 Python 等价物（2026-11-07 定稿）：
-      #   .env = application.yml（公共项：Key/模型名/超时，跨机同步）
-      #   .env.test = application-test.yml（环境差异项，由下方 environment 激活）
-      # 覆盖顺序：environment(BANMA_ENV) > .env.test > .env
+      # 覆盖顺序：environment(BANMA_ENV) > .env.prod > .env
       - path: ../AI-Meeting-Agent/.env
         required: true
-      - path: ../AI-Meeting-Agent/.env.test
+      - path: ../AI-Meeting-Agent/.env.prod
         required: true
     environment:
       # ≈ spring.profiles.active：激活哪个 .env.{env}；部署配置写死，永不手敲
-      BANMA_ENV: test
+      BANMA_ENV: prod
     ports:
       - "8100:8100"
     depends_on:
