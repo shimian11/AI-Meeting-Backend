@@ -8,7 +8,7 @@
 --   ① 自带建库（banma_interview）与 USE，无需手工建库
 --   ② 全部 CREATE TABLE IF NOT EXISTS —— 可重复执行，不会报「表已存在」，也不会删数据
 --   ③ 索引全部内联在表定义里（无独立 CREATE INDEX，避免重复执行报错）
---   ④ 只建结构，不含 INSERT；账号通过前端注册产生
+--   ④ 只建结构 + **必需的 4 行 agent_properties 种子**（无业务数据）；账号通过前端注册产生
 --
 -- 历史上拆出的 migration-01/02 已删除：它们的 ALTER 项（uk_mail、agent_properties 凭证列）
 -- 已内联进本文件，新建库无需增量脚本。
@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS t_user
     deletion_time BIGINT       NULL COMMENT '注销时间戳',
     create_time   DATETIME     NULL COMMENT '创建时间',
     update_time   DATETIME     NULL COMMENT '修改时间',
-    del_flag      TINYINT(1)   NULL COMMENT '删除标识 0：未删除 1：已删除',
+    del_flag      TINYINT(1)   DEFAULT 0 COMMENT '删除标识 0：未删除 1：已删除',
     CONSTRAINT idx_unique_username UNIQUE (username),
     CONSTRAINT uk_mail UNIQUE (mail)
 );
@@ -79,7 +79,8 @@ CREATE TABLE IF NOT EXISTS agent_properties
     agent_name  VARCHAR(256) NULL COMMENT '智能体名称',
     create_time DATETIME     NULL COMMENT '创建时间',
     update_time DATETIME     NULL COMMENT '修改时间',
-    del_flag    TINYINT(1)   NULL COMMENT '删除标识 0：未删除 1：已删除'
+    del_flag    TINYINT(1)   DEFAULT 0 COMMENT '删除标识 0：未删除 1：已删除',
+    CONSTRAINT uk_agent_name UNIQUE (agent_name)
 );
 
 -- 智能体标签表：控制台筛选用
@@ -269,3 +270,26 @@ CREATE TABLE IF NOT EXISTS agent_usage_quota
     PRIMARY KEY (id),
     UNIQUE KEY uk_user_date (username, quota_date) COMMENT '每人每天一行；计数走 ON DUPLICATE KEY UPDATE 原子累加'
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT ='用户用量配额（6F，按日聚合）';
+
+-- ============================================================
+-- 必需种子：5 个智能体绑定（缺任何一条，出题/评分/追问会在首个请求时抛 B000406）
+--
+-- ⚠️ 值是 **agent_name（中文）**，不是 scene key（英文）：
+--    代码 BusinessAgentResolver 按 `agent_name = 配置名` 查本表，
+--    配置名默认值来自 application.yaml 的 agent-binding 段。
+--    scene key（如 interview-question-asking）只是枚举标识，**不落库**。
+--
+--    general-agent-chat            → 通用智能体
+--    interview-question-extraction → 面试出题官
+--    interview-answer-evaluation   → 用户答案评分官
+--    interview-demeanor            → 神态分析官
+--    interview-question-asking     → 面试提问官
+--
+-- 幂等：uk_agent_name 唯一索引 + INSERT IGNORE，重复执行不会插重复行。
+-- ============================================================
+INSERT IGNORE INTO agent_properties (agent_name, create_time, update_time, del_flag) VALUES
+    ('通用智能体',     NOW(), NOW(), 0),
+    ('面试出题官',     NOW(), NOW(), 0),
+    ('用户答案评分官', NOW(), NOW(), 0),
+    ('神态分析官',     NOW(), NOW(), 0),
+    ('面试提问官',     NOW(), NOW(), 0);
