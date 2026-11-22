@@ -22,17 +22,14 @@ public interface InterviewWorkflowService {
     InterviewQuestionRespDTO extractInterviewQuestions(InterviewQuestionReqDTO requestParam);
 
     /**
-     * 调 Python 出题官并把结果落库（前端 → Java → Python 的 JSON 网关链路）。
+     * 出题并落库；成功后由实现把会话状态推进到 READY（否则答题被状态机拒绝）。
      *
-     * <p>与 {@link #extractInterviewQuestions} 的区别：后者走旧 multipart 上传链路（已下线），
-     * 本方法入参是对 Python 契约的 JSON DTO。</p>
-     *
-     * @param requestParam 出题请求（sessionId 必填、resumeUrl 可空）
-     * @param userName     当前登录用户名，写入题目归档
-     * @return Python 出题官的原始响应
+     * @param requestParam 出题入参
+     * @param userName     当前用户（写库审计）
+     * @param userId       当前用户 id（会话归属校验用）
+     * @return 出题结果
      */
-    QuestionOfficerRespDTO runQuestionOfficer(QuestionOfficerReqDTO requestParam, String userName);
-
+    QuestionOfficerRespDTO runQuestionOfficer(QuestionOfficerReqDTO requestParam, String userName, Long userId);
 
     /**
      * 提交面试回答并推进流程。

@@ -37,7 +37,7 @@ public class AgentQuestionOfficerController {
     public Result<QuestionOfficerRespDTO> runQuestionOfficer(
             @RequestBody QuestionOfficerReqDTO requestParam,
             @CurrentUser UserContext currentUser){
-        return Results.success(interviewWorkflowService.runQuestionOfficer(requestParam, currentUser.getUsername()));
+        return Results.success(interviewWorkflowService.runQuestionOfficer(requestParam, currentUser.getUsername(), currentUser.getUserId()));
     }
 
 }

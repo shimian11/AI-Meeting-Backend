@@ -18,6 +18,7 @@ import com.banma.interview.interview.infrastructure.client.dto.QuestionOfficerRe
 import com.banma.interview.interview.infrastructure.client.dto.QuestionOfficerRespDTO;
 import com.banma.interview.interview.service.InterviewQuestionCacheService;
 import com.banma.interview.interview.service.InterviewQuestionService;
+import com.banma.interview.interview.service.InterviewSessionService;
 import com.banma.interview.interview.service.model.InterviewFlowState;
 import com.banma.interview.interview.service.model.InterviewRuntimeLoadMode;
 import com.banma.interview.interview.service.model.InterviewTurnLog;
@@ -55,6 +56,8 @@ public class InterviewAgentOrchestrationService implements InterviewWorkflowServ
     private final InterviewQuestionService  interviewQuestionService;
     /** Python Agent 客户端 */
     private final BanmaAgentClient banmaAgentClient;
+    /** 会话状态机（INIT->READY->IN_PROGRESS) **/
+    private final InterviewSessionService  interviewSessionService;
 
     /** 出题意图标识：只有该意图才产生题目并需要落库 */
     private static final String INTENT_GENERATE = "GENERATE";
@@ -69,25 +72,36 @@ public class InterviewAgentOrchestrationService implements InterviewWorkflowServ
     }
 
     /**
-     * 调 Python 出题官并把结果落库（实现 {@link InterviewWorkflowService#runQuestionOfficer}）。
-     *
-     * <p><b>落库不造轮子</b>：DB 走 {@code upsertStructuredExtraction}（题目主数据 + 缓存回补来源），
-     * 缓存走 {@code cacheInterviewQuestions}（答题 Pipeline 直接读），游标走 {@code ensureInitialized}。</p>
-     *
-     * @param requestParam 出题请求（sessionId 必填）
-     * @param userName     当前登录用户名
-     * @return Python 出题官的原始响应
+     * 出题：调用Python出题官->落库->推进会话状态
+     * @param requestParam 出题入参
+     * @param userName     当前用户（写库审计）
+     * @param userId       当前用户 id（会话归属校验用）
+     * @return
      */
     @Override
-    public QuestionOfficerRespDTO runQuestionOfficer(QuestionOfficerReqDTO requestParam, String userName) {
-        // (1)traceId 由服务端生成
+    public QuestionOfficerRespDTO runQuestionOfficer(QuestionOfficerReqDTO requestParam, String userName, Long userId) {
+        //(1)生成traceId
         requestParam.setTraceId(UUID.randomUUID().toString());
 
-        //(2) 调用Python出题官agent
+        //(2)调用Python出题官agent
         QuestionOfficerRespDTO response = banmaAgentClient.runQuestionOfficer(requestParam);
 
-        //(3) 出题结果落库
+        //(3)出题结果落库
         persistQuestionSet(requestParam, response, userName);
+
+        // (4) 推进会话状态 INIT → READY
+        if(StrUtil.isNotBlank(requestParam.getSessionId())){
+            try{
+                interviewSessionService.markReady(
+                        requestParam.getSessionId(),
+                        userId,
+                        requestParam.getResumeUrl(),
+                        requestParam.getDirectionDefault()
+                );
+            }catch (Exception e){
+                log.warn("推进会话状态失败（不阻断出题），sessionId={}", requestParam.getSessionId(), e);
+            }
+        }
 
         return response;
     }
