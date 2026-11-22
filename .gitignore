@@ -35,3 +35,6 @@ uploads/
 # ===== 系统 =====
 .DS_Store
 Thumbs.db
+
+# 回归脚本的本地凭据（含登录密码，禁入库）
+scripts/.regression.env
