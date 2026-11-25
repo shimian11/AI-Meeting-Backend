@@ -177,6 +177,13 @@
             <artifactId>spring-security-crypto</artifactId>
         </dependency>
 
+        <!-- MinIO 对象存储：简历与题库文档 -->
+        <dependency>
+            <groupId>io.minio</groupId>
+            <artifactId>minio</artifactId>
+            <version>8.5.17</version>
+        </dependency>
+
     </dependencies>
     <build>
         <plugins>
