@@ -2,8 +2,8 @@ package com.banma.interview.interview.service.impl;
 
 import cn.hutool.core.util.StrUtil;
 import com.banma.interview.interview.api.io.req.DemeanorScoreDTO;
-import com.banma.interview.interview.application.strategy.DemeanorNormalizationStrategy;
-import com.banma.interview.interview.application.strategy.InterviewScoreAggregatorStrategy;
+import com.banma.interview.interview.service.strategy.DemeanorNormalizationStrategy;
+import com.banma.interview.interview.service.strategy.InterviewScoreAggregatorStrategy;
 import com.banma.interview.interview.service.InterviewScoreService;
 import com.banma.interview.interview.service.cache.InterviewCacheKeys;
 import com.banma.interview.interview.service.cache.InterviewCacheStore;

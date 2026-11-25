@@ -1,4 +1,4 @@
-package com.banma.interview.interview.application.strategy;
+package com.banma.interview.interview.service.strategy;
 
 import com.banma.interview.interview.api.io.resp.RadarChartDTO;
 import org.springframework.stereotype.Component;

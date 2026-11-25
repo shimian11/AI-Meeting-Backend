@@ -1,7 +1,7 @@
 package com.banma.interview.interview.service.impl;
 
 import com.banma.interview.interview.api.io.resp.RadarChartDTO;
-import com.banma.interview.interview.application.strategy.RadarComputationStrategy;
+import com.banma.interview.interview.service.strategy.RadarComputationStrategy;
 import com.banma.interview.interview.service.InterviewRadarService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

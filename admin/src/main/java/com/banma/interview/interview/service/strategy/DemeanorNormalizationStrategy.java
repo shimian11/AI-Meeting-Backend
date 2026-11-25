@@ -1,4 +1,4 @@
-package com.banma.interview.interview.application.strategy;
+package com.banma.interview.interview.service.strategy;
 
 public interface DemeanorNormalizationStrategy {
 
