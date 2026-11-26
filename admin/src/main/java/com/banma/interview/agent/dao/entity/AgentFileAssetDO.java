@@ -18,11 +18,6 @@ public class AgentFileAssetDO {
     private Long id;
 
     /**
-     * 智能体ID
-     */
-    private Long agentId;
-
-    /**
      * 会话ID
      */
     private String sessionId;
