@@ -1,5 +1,5 @@
 -- ============================================================
--- schema.sql · 全量建库 + 建表（12 张）
+-- schema.sql · 全量建库 + 建表（10 张）
 --
 -- 一条命令从零到有：
 --   mysql -uroot -p < schema.sql
@@ -104,7 +104,6 @@ CREATE TABLE IF NOT EXISTS agent_file_asset
 (
     id              BIGINT AUTO_INCREMENT COMMENT '主键ID'
         PRIMARY KEY,
-    agent_id        BIGINT                                NOT NULL COMMENT '智能体ID',
     session_id      VARCHAR(64)                           NULL COMMENT '会话ID',
     user_name       VARCHAR(64)                           NOT NULL COMMENT '上传用户名（值=邮箱）',
     biz_type        VARCHAR(32)  DEFAULT 'general'        NOT NULL COMMENT '业务类型：resume/kb/audio',
@@ -120,7 +119,6 @@ CREATE TABLE IF NOT EXISTS agent_file_asset
     create_time     DATETIME    DEFAULT CURRENT_TIMESTAMP NULL COMMENT '创建时间',
     update_time     DATETIME    DEFAULT CURRENT_TIMESTAMP NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     del_flag        TINYINT     DEFAULT 0                NOT NULL COMMENT '删除标识：0未删除 1已删除',
-    KEY idx_agent_id (agent_id),
     KEY idx_create_time (create_time),
     KEY idx_session_id (session_id),
     KEY idx_user_name (user_name)
@@ -155,48 +153,6 @@ CREATE TABLE IF NOT EXISTS interview_record
     UNIQUE KEY uk_interview_record_user_session_del (user_id, session_id, del_flag),
     KEY idx_session_id (session_id)
 ) COMMENT '面试记录表' COLLATE = utf8mb4_unicode_ci;
-
--- AI 配置表：一行 = 一个模型接入点（Java 直调场景，7A 追问链用）
-CREATE TABLE IF NOT EXISTS ai_properties
-(
-    id                     BIGINT AUTO_INCREMENT COMMENT 'ID'
-        PRIMARY KEY,
-    ai_name                VARCHAR(256)               NOT NULL COMMENT 'AI名称',
-    ai_type                VARCHAR(64)                NOT NULL COMMENT 'AI类型：deepseek、openai 等',
-    api_key                VARCHAR(512)               NOT NULL COMMENT 'API密钥',
-    api_secret             VARCHAR(512)               NULL COMMENT 'API密钥（部分AI需要）',
-    api_url                VARCHAR(512)               NULL COMMENT 'API地址',
-    model_name             VARCHAR(256)               NULL COMMENT '模型名称',
-    max_tokens             INT           DEFAULT 4096 NULL COMMENT '最大token数',
-    temperature            DECIMAL(3, 2) DEFAULT 0.70 NULL COMMENT '温度参数',
-    system_prompt          TEXT                       NULL COMMENT '系统提示词（控制台可调，免发版）',
-    is_enabled             TINYINT(1)    DEFAULT 1    NULL COMMENT '是否启用 0：禁用 1：启用',
-    enable_thinking        TINYINT(1)    DEFAULT 0    NULL COMMENT '是否开启思考模式（DeepSeek专用，ADR-014 显式关思考）',
-    thinking_budget_tokens INT                        NULL COMMENT '思考模式预算Token数（DeepSeek专用）',
-    create_time            DATETIME                   NULL COMMENT '创建时间',
-    update_time            DATETIME                   NULL COMMENT '修改时间',
-    del_flag               TINYINT(1)    DEFAULT 0    NULL COMMENT '删除标识 0：未删除 1：已删除',
-    project_id             VARCHAR(255)               NULL COMMENT '项目ID',
-    organization_id        VARCHAR(255)               NULL COMMENT '组织ID',
-    KEY idx_ai_type (ai_type),
-    KEY idx_create_time (create_time)
-) COMMENT 'AI配置表';
-
--- AI 消息媒体附件表：会话中图片/文件/音频的元数据
-CREATE TABLE IF NOT EXISTS ai_message_media
-(
-    id           BIGINT AUTO_INCREMENT COMMENT 'ID'
-        PRIMARY KEY,
-    session_id   VARCHAR(64)                 NOT NULL COMMENT '会话ID',
-    message_seq  INT                         NOT NULL COMMENT '消息序号',
-    media_type   VARCHAR(32) DEFAULT 'image' NOT NULL COMMENT '媒体类型：image, file, audio',
-    media_url    VARCHAR(1024)               NOT NULL COMMENT '媒体URL',
-    file_name    VARCHAR(256)                NULL COMMENT '原始文件名',
-    file_size    BIGINT                      NULL COMMENT '文件大小（字节）',
-    content_type VARCHAR(128)                NULL COMMENT '文件MIME类型',
-    create_time  DATETIME                    NULL COMMENT '创建时间',
-    KEY idx_session_seq (session_id, message_seq)
-) COMMENT 'AI消息媒体附件表';
 
 -- ============================================================
 -- 题库域（6G）
