@@ -1,24 +1,28 @@
 package com.banma.interview.agent.service.impl;
 
 import cn.hutool.core.util.StrUtil;
+import com.banma.interview.storage.infrastructure.MinioProperties;
+import com.banma.interview.storage.infrastructure.MinioStorageService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.banma.interview.agent.api.io.resp.AgentFileUploadRespDTO;
-import com.banma.interview.agent.application.AgentResolver;
-import com.banma.interview.agent.application.BusinessAgentResolver;
-import com.banma.interview.agent.application.BusinessAgentScene;
 import com.banma.interview.agent.dao.entity.AgentFileAssetDO;
-import com.banma.interview.agent.dao.entity.AgentPropertiesDO;
 import com.banma.interview.agent.dao.mapper.AgentFileAssetMapper;
 import com.banma.interview.agent.service.AgentFileAssetService;
 import com.banma.interview.common.convention.exception.ClientException;
-import com.banma.interview.common.enums.AgentErrorCodeEnum;
+import com.banma.interview.common.enums.FileErrorCodeEnum;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.UUID;
 
 /**
  * 智能体文件资产服务实现：负责文件存储并持久化文件资产记录。
@@ -31,21 +35,25 @@ public class AgentFileAssetServiceImpl extends ServiceImpl<AgentFileAssetMapper,
         implements AgentFileAssetService {
 
     private static final String DEFAULT_BIZ_TYPE = "general";
-    /** 存储平台标识：讯飞下线后统一为 minio（6G 接入后生效） */
     private static final String SOURCE_PLATFORM_MINIO = "minio";
+    /** 简历大小上限：20MB */
+    private static final long MAX_RESUME_SIZE = 20L * 1024 * 1024;
+    /** PDF 文件头魔数 */
+    private static final String PDF_MAGIC = "%PDF-";
+    private static final String RESUME_EXT = "pdf";
 
-    private final AgentResolver agentResolver;
-    private final BusinessAgentResolver businessAgentResolver;
+    private final MinioStorageService  minioStorageService;
+    private final MinioProperties  minioProperties;
 
     /**
      * 保存文件资产记录并返回文件访问地址等信息。
      *
      * 步骤：
-     *   1. 校验上传文件非空
-     *   2. 解析智能体配置
-     *   3. 存储文件（原讯飞 uploadFile 已删除；MinIO 接入在 6G，此处暂抛「未接入」）
-     *   4. 组装文件资产记录并入库
-     *   5. 组装上传结果返回
+     * 1、检验上传文件非空
+     * 2、校验文件内容（大小，以及文件格式是否正确）
+     * 3、上传到Minio（objectKey=resume/{yyyyMM}/{uuid}.pdf)
+     * 4、落库agent_file_asset
+     * 5、返回预签名url
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -54,43 +62,96 @@ public class AgentFileAssetServiceImpl extends ServiceImpl<AgentFileAssetMapper,
             String bizType,
             String username,
             MultipartFile file) {
-        // 步骤 1：校验上传文件非空
+        // 1：校验上传文件非空
         if (file == null || file.isEmpty()) {
-            throw new ClientException("uploaded file cannot be empty", AgentErrorCodeEnum.AGENT_SAVE_ERROR);
+            throw new ClientException("上传文件为空", FileErrorCodeEnum.FILE_EMPTY);
         }
 
-        // 步骤 2：解析智能体配置
-        AgentPropertiesDO agentProperties = resolveAgentProperties(sessionId);
+        //2：校验内容(扩展名+文件头校验)
+        validateResumeFile(file);
 
-        // 步骤 3：文件存储。讯飞 uploadFile 已删除；MinIO 在 6G 接入（ADR-016），
-        //         接入前上传接口不可用——直接报业务错误而非静默假成功
-        String fileUrl;
-        try {
-            throw new ClientException(
-                    "文件存储后端切换中：讯飞上传已下线，MinIO 将于题库后端（6G）接入",
-                    AgentErrorCodeEnum.AGENT_SAVE_ERROR);
-        } catch (ClientException ex) {
-            throw ex;
+        //3、上传到minIO
+        String originalFileName = normalizeFileName(file.getOriginalFilename());
+        String objectKey = buildResumeObjectKey(extractFileExt(originalFileName));
+        String bucket = minioProperties.getBucketResume();
+        try(InputStream in = file.getInputStream()){
+            minioStorageService.ensureBucket(bucket);
+            minioStorageService.upload(bucket,objectKey,in,file.getSize(),MediaType.APPLICATION_PDF_VALUE);
+        }catch (IOException ex){
+            log.error("读取上传文件失败, fileName={}", originalFileName, ex);
+            throw new ClientException("读取上传文件失败", FileErrorCodeEnum.FILE_READ_FAILED);
         }
 
-        // 步骤 4~5（MinIO 接入后恢复）：组装资产记录入库并返回
-        // String originalFileName = normalizeFileName(file.getOriginalFilename());
-        // ... 原 (4)(5) 逻辑保留在 git 历史（commit e3b3c99 之前的版本），6G 时参照恢复
+        //4、落库
+        Date now = new Date();
+        AgentFileAssetDO fileAssetDO = new AgentFileAssetDO();
+        fileAssetDO.setSessionId(StrUtil.isBlank(sessionId) ? null : sessionId.trim());
+        fileAssetDO.setUserName(StrUtil.blankToDefault(username, "unknown"));
+        fileAssetDO.setBizType(StrUtil.blankToDefault(bizType, DEFAULT_BIZ_TYPE));
+        fileAssetDO.setSourcePlatform(SOURCE_PLATFORM_MINIO);
+        fileAssetDO.setFileName(originalFileName);
+        fileAssetDO.setFileExt(extractFileExt(originalFileName));
+        fileAssetDO.setContentType(MediaType.APPLICATION_PDF_VALUE);
+        fileAssetDO.setFileSize(file.getSize());
+        // 库里存逻辑地址：预签名 URL 有有效期，存进去明天就是死链
+        fileAssetDO.setFileUrl(String.format("minio://%s/%s", bucket, objectKey));
+        fileAssetDO.setMinioKey(objectKey);
+        fileAssetDO.setUploadStatus(1);
+        fileAssetDO.setCreateTime(now);
+        fileAssetDO.setUpdateTime(now);
+        fileAssetDO.setDelFlag(0);
+
+        if (!save(fileAssetDO)) {
+            throw new ClientException("保存文件资产记录失败", FileErrorCodeEnum.FILE_RECORD_SAVE_FAILED);
+        }
+
+        // 步骤 5：组装返回（fileUrl 现签，前端可直接打开；长期引用请用 id 重新签名）
+        AgentFileUploadRespDTO respDTO = new AgentFileUploadRespDTO();
+        respDTO.setId(fileAssetDO.getId());
+        respDTO.setSessionId(fileAssetDO.getSessionId());
+        respDTO.setBizType(fileAssetDO.getBizType());
+        respDTO.setFileName(fileAssetDO.getFileName());
+        respDTO.setFileSize(fileAssetDO.getFileSize());
+        respDTO.setContentType(fileAssetDO.getContentType());
+        respDTO.setFileUrl(minioStorageService.presignedGetUrl(bucket, objectKey, null));
+        respDTO.setCreateTime(fileAssetDO.getCreateTime());
+        return respDTO;
     }
 
     /**
-     * 解析文件归属的智能体：优先使用会话绑定的智能体，未绑定时回退到通用业务场景配置。
+     * 校验简历：大小、扩展名、文件头三重校验。
+     * @param file 上传的简历文件
      */
-    private AgentPropertiesDO resolveAgentProperties(String sessionId) {
-        // （1）会话非空时优先取绑定的智能体
-        if (StrUtil.isNotBlank(sessionId)) {
-            AgentPropertiesDO boundAgent = agentResolver.resolveAgent(sessionId, null);
-            if (boundAgent != null) {
-                return boundAgent;
-            }
+    private void validateResumeFile(MultipartFile file) {
+        //1、大小
+        if(file.getSize() > MAX_RESUME_SIZE) {
+            throw new ClientException("简历不能超过 20MB", FileErrorCodeEnum.FILE_TOO_LARGE);
         }
-        // （2）未绑定时回退到通用场景所需的智能体
-        return businessAgentResolver.resolveRequired(BusinessAgentScene.GENERAL_AGENT_CHAT);
+        //2、扩展名
+        String ext = extractFileExt(normalizeFileName(file.getOriginalFilename()));
+        if(!RESUME_EXT.equals(ext)){
+            throw new ClientException("暂时只支持 PDF 简历", FileErrorCodeEnum.FILE_TYPE_UNSUPPORTED);
+        }
+        //3、文件头
+        try(InputStream in = file.getInputStream()){
+            byte[] head = new byte[PDF_MAGIC.length()];
+            int read = in.read(head);
+            if(read < head.length || !PDF_MAGIC.equals(new String(head, StandardCharsets.US_ASCII))){
+                throw new ClientException("文件内容不是有效的 PDF", FileErrorCodeEnum.FILE_CONTENT_INVALID);
+            }
+        }catch (IOException ex) {
+            log.error("读取文件头失败, fileName={}", file.getOriginalFilename(), ex);
+            throw new ClientException("读取上传文件失败", FileErrorCodeEnum.FILE_READ_FAILED);
+        }
+    }
+
+    /**
+     * 生成简历对象键`resume/{yyyyMM}/{uuid}.{ext}`
+     */
+    private String buildResumeObjectKey(String ext){
+        String month = new SimpleDateFormat("yyyyMM").format(new Date());
+        String suffix = StrUtil.isBlank(ext) ? RESUME_EXT : ext;
+        return String.format("resume/%s/%s.%s", month, UUID.randomUUID(), suffix);
     }
 
     /**

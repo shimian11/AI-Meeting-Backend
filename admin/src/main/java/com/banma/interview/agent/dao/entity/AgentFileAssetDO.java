@@ -63,6 +63,11 @@ public class AgentFileAssetDO {
     private String fileUrl;
 
     /**
+     * Minio对象键
+     */
+    private String minioKey;
+
+    /**
      * 上传状态：1 成功，2 失败
      */
     private Integer uploadStatus;
