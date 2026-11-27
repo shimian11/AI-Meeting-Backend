@@ -1,5 +1,6 @@
-package com.banma.interview.interview.application.strategy;
+package com.banma.interview.interview.service.strategy;
 
+import com.banma.interview.interview.service.strategy.AverageInterviewScoreAggregatorStrategy;
 import com.banma.interview.interview.service.model.InterviewTurnLog;
 import org.junit.jupiter.api.Test;
 

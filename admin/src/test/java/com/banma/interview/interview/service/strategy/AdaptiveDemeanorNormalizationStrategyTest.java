@@ -1,5 +1,6 @@
-package com.banma.interview.interview.application.strategy;
+package com.banma.interview.interview.service.strategy;
 
+import com.banma.interview.interview.service.strategy.AdaptiveDemeanorNormalizationStrategy;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
