@@ -50,6 +50,7 @@ public class MinioStorageServiceImpl implements MinioStorageService{
             //(1)写如对象：size未知时传入-1，让minio客户端自动分片
             minioClient.putObject(PutObjectArgs.builder()
                     .bucket(bucket)
+                    .object(objectKey)
                     .stream(in, size, -1)
                     .contentType(contentType)
                     .build());
