@@ -177,6 +177,15 @@
             <artifactId>spring-security-crypto</artifactId>
         </dependency>
 
+        <!-- 本地开发热重启：监听 target/classes 变化 → 快速重启 Spring 上下文（约 2~5s）
+             scope=runtime + optional：spring-boot-maven-plugin 打包时自动排除，不进生产包 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+            <scope>runtime</scope>
+            <optional>true</optional>
+        </dependency><!---->
+
         <!-- MinIO 对象存储：简历与题库文档 -->
         <dependency>
             <groupId>io.minio</groupId>
