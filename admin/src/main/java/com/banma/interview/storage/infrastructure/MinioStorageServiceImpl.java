@@ -1,6 +1,7 @@
 package com.banma.interview.storage.infrastructure;
 
 import com.banma.interview.common.convention.exception.ClientException;
+import com.banma.interview.common.enums.FileErrorCodeEnum;
 import io.minio.*;
 import io.minio.errors.*;
 import io.minio.http.Method;
@@ -39,7 +40,7 @@ public class MinioStorageServiceImpl implements MinioStorageService{
             log.info("Minio桶已创建: {}",bucket);
         } catch (Exception e) {
             log.error("MinIO 桶初始化失败, bucket={}", bucket, e);
-            throw new ClientException("文件存储初始化失败，请检查 MinIO 是否启动");
+            throw new ClientException("文件存储初始化失败，请检查 MinIO 是否启动", FileErrorCodeEnum.FILE_UPLOAD_FAILED);
         }
     }
 
@@ -56,7 +57,7 @@ public class MinioStorageServiceImpl implements MinioStorageService{
             return objectKey;
         }catch (Exception e){
             log.error("MinIO 上传失败, bucket={}, key={}", bucket, objectKey, e);
-            throw new ClientException("文件上传失败，请稍后重试");
+            throw new ClientException("文件上传失败，请稍后重试", FileErrorCodeEnum.FILE_UPLOAD_FAILED);
         }
     }
 
@@ -74,7 +75,7 @@ public class MinioStorageServiceImpl implements MinioStorageService{
                     .build());
         }catch (Exception e){
             log.error("MinIO 预签名失败, bucket={}, key={}", bucket, objectKey, e);
-            throw new ClientException("生成文件访问地址失败");
+            throw new ClientException("生成文件访问地址失败", FileErrorCodeEnum.FILE_PRESIGN_FAILED);
         }
     }
 
@@ -96,7 +97,7 @@ public class MinioStorageServiceImpl implements MinioStorageService{
             log.info("MinIO 删除成功, bucket={}, key={}", bucket, objectKey);
         } catch (Exception e) {
             log.error("MinIO 删除失败, bucket={}, key={}", bucket, objectKey, e);
-            throw new ClientException("文件删除失败");
+            throw new ClientException("文件删除失败", FileErrorCodeEnum.FILE_DELETE_FAILED);
         }
     }
 }
